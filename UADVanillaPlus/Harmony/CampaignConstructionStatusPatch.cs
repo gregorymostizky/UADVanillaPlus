@@ -2,16 +2,20 @@ using System.Diagnostics;
 using HarmonyLib;
 using Il2Cpp;
 using MelonLoader;
+using UnityEngine;
 
 namespace UADVanillaPlus.Harmony;
 
 // Patch intent: vanilla keeps commissioning ships out of the campaign build
-// summary even though they are still not active ships. VP folds commissioning
-// into the existing build count as total(commissioning) so the campaign panel
-// stays compact without hiding ships that are nearly ready.
+// summary even though they are still not active ships. VP keeps the panel compact
+// while showing three exclusive queue buckets: own builds, foreign contracts, and
+// commissioning ships.
 [HarmonyPatch(typeof(CampaignCountryInfoUI))]
 internal static class CampaignConstructionStatusPatch
 {
+    private const string ForeignBuildColor = "#9A9A9A";
+    private const string ConstructionTooltip = "Shown as own builds / foreign contracts (commissioning).\nForeign contracts are ships this nation's yards are building for another nation.\nCommissioning ships are counted separately from ships still under construction.";
+    private static readonly HashSet<GameObject> TooltipTargets = new();
     private static string lastLoggedSummary = string.Empty;
 
     [HarmonyPrefix]
@@ -41,6 +45,7 @@ internal static class CampaignConstructionStatusPatch
                 __instance.BuildingLabel.text = $"Building {counts.TotalDisplay} ships:";
 
             __instance.BuildingList.text = counts.TypeDisplay;
+            EnsureConstructionTooltip(__instance);
 
             string summary = $"{counts.TotalDisplay}|{counts.TypeDisplay}";
             if (summary != lastLoggedSummary)
@@ -85,7 +90,7 @@ internal static class CampaignConstructionStatusPatch
                     if (ship == null || ship.isDesign)
                         continue;
 
-                    AddVessel(byType, ShipTypeLabel(ship), ship.isCommissioning);
+                    AddVessel(byType, ShipTypeLabel(ship), ship.isCommissioning, ship.ForSaleTo != null);
                     continue;
                 }
 
@@ -95,20 +100,12 @@ internal static class CampaignConstructionStatusPatch
                     if (submarine == null)
                         continue;
 
-                    AddVessel(byType, SubmarineTypeLabel(submarine), submarine.isCommissioning);
+                    AddVessel(byType, SubmarineTypeLabel(submarine), submarine.isCommissioning, false);
                 }
             }
 
-            int total = 0;
-            int commissioning = 0;
-            foreach (TypeCounts typeCounts in byType.Values)
-            {
-                total += typeCounts.Total;
-                commissioning += typeCounts.Commissioning;
-            }
-
             counts = new ConstructionCounts(
-                $"{total}({commissioning})",
+                FormatCounts(TotalTypeCounts(byType.Values)),
                 byType.Count == 0 ? "-" : string.Join(", ", OrderedTypeDisplays(byType)));
             return true;
         }
@@ -139,18 +136,70 @@ internal static class CampaignConstructionStatusPatch
 
     private static string TypeDisplay(string type, TypeCounts counts)
     {
-        return $"{counts.Total}({counts.Commissioning}) {type}s";
+        return $"{FormatCounts(counts)} {type}s";
     }
 
-    private static void AddVessel(Dictionary<string, TypeCounts> byType, string type, bool isCommissioning)
+    private static void AddVessel(Dictionary<string, TypeCounts> byType, string type, bool isCommissioning, bool isForeignContract)
     {
         byType.TryGetValue(type, out TypeCounts typeCounts);
-        typeCounts.Total++;
 
         if (isCommissioning)
+        {
             typeCounts.Commissioning++;
+        }
+        else if (isForeignContract)
+        {
+            typeCounts.BuildingForeign++;
+        }
+        else
+        {
+            typeCounts.BuildingOwn++;
+        }
 
         byType[type] = typeCounts;
+    }
+
+    private static string FormatCounts(TypeCounts counts)
+    {
+        return $"{counts.BuildingOwn} / {Grey(counts.BuildingForeign)} ({counts.Commissioning})";
+    }
+
+    private static string Grey(int value)
+    {
+        return $"<color={ForeignBuildColor}>{value}</color>";
+    }
+
+    private static TypeCounts TotalTypeCounts(IEnumerable<TypeCounts> counts)
+    {
+        TypeCounts total = new();
+        foreach (TypeCounts count in counts)
+        {
+            total.BuildingOwn += count.BuildingOwn;
+            total.BuildingForeign += count.BuildingForeign;
+            total.Commissioning += count.Commissioning;
+        }
+
+        return total;
+    }
+
+    private static void EnsureConstructionTooltip(CampaignCountryInfoUI ui)
+    {
+        AddTooltip(ui.BuildingLabel?.gameObject);
+        AddTooltip(ui.BuildingList?.gameObject);
+    }
+
+    private static void AddTooltip(GameObject? target)
+    {
+        if (target == null || TooltipTargets.Contains(target))
+            return;
+
+        TooltipTargets.Add(target);
+
+        OnEnter onEnter = target.AddComponent<OnEnter>();
+        onEnter.action = new System.Action(() => G.ui.ShowTooltip(ConstructionTooltip, target));
+
+        OnLeave onLeave = target.AddComponent<OnLeave>();
+        onLeave.action = new System.Action(() => G.ui.HideTooltip());
     }
 
     private static bool IsKnownType(string type)
@@ -180,7 +229,8 @@ internal static class CampaignConstructionStatusPatch
 
     private struct TypeCounts
     {
-        internal int Total;
+        internal int BuildingOwn;
+        internal int BuildingForeign;
         internal int Commissioning;
     }
 }

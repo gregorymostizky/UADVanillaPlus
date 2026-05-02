@@ -53,9 +53,11 @@ internal static class CampaignFleetWindowDesignViewerPatch
     {
         public int Active;
         public int Building;
+        public int BuildingForOthers;
         public int Other;
 
         public int Total => Active + Building + Other;
+        public string BuildingDisplay => $"{Building}({BuildingForOthers})";
     }
 
     private static bool HasDesignTab(CampaignFleetWindow window)
@@ -476,7 +478,7 @@ internal static class CampaignFleetWindowDesignViewerPatch
         {
             player.Name(false),
             $"Designs: {designs.Count}",
-            $"Ships: {total.Total} ({total.Active}/{total.Building}/{total.Other})"
+            $"Ships: {total.Total} ({total.Active}/{total.BuildingDisplay}/{total.Other})"
         };
 
         if (designsByClass.Count > 0)
@@ -508,7 +510,7 @@ internal static class CampaignFleetWindowDesignViewerPatch
             return;
 
         DesignShipCounts counts = GetDesignShipCounts(player, design);
-        ui.ShipCount.text = $"{counts.Active}/{counts.Building}/{counts.Other}";
+        ui.ShipCount.text = $"{counts.Active}/{counts.BuildingDisplay}/{counts.Other}";
     }
 
     private static void SetDeletedDesignRowText(FleetWindow_ShipElementUI ui, Ship design)
@@ -523,7 +525,15 @@ internal static class CampaignFleetWindowDesignViewerPatch
     private static void AddShipStateToCounts(Ship ship, ref DesignShipCounts counts)
     {
         if (ship.isBuilding || ship.isCommissioning)
+        {
+            // ForSaleTo is vanilla's "this yard is building the ship for another nation"
+            // marker. Keep those ships inside the normal building total, but show the
+            // foreign-contract subset in parentheses so the Designs tab explains where
+            // the queue pressure is coming from.
             counts.Building++;
+            if (ship.ForSaleTo != null)
+                counts.BuildingForOthers++;
+        }
         else if (ship.isAlive && !ship.isRefit && !ship.isRepairing)
             counts.Active++;
         else
@@ -565,7 +575,7 @@ internal static class CampaignFleetWindowDesignViewerPatch
             return;
 
         DesignShipCountHeaderTooltips.Add(target);
-        AddRawTooltip(target, "Shown as active/building/other.\nActive: afloat and available.\nBuilding: under construction or commissioning.\nOther: refit, repair, mothball, or otherwise unavailable.");
+        AddRawTooltip(target, "Shown as active/building/other.\nBuilding uses total(foreign contracts).\nActive: afloat and available.\nOther: refit, repair, mothball, or otherwise unavailable.");
     }
 
     private static void AddRawTooltip(GameObject ui, string content)
