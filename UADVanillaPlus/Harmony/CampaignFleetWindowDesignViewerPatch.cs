@@ -771,6 +771,101 @@ internal static class CampaignFleetWindowDesignViewerPatch
         ForeignDesignClickVisited.Clear();
     }
 
+    private static Il2CppSystem.Collections.Generic.List<Ship> BuildUiBackedDesignList(CampaignFleetWindow window, Il2CppSystem.Collections.Generic.List<Ship> requestedDesigns, string context)
+    {
+        Il2CppSystem.Collections.Generic.List<Ship> safeDesigns = new();
+        if (window?.designUiByShip == null)
+            return safeDesigns;
+
+        int requestedCount = requestedDesigns?.Count ?? 0;
+        int missingCount = 0;
+        List<string> missingSamples = new();
+
+        if (requestedDesigns != null)
+        {
+            foreach (Ship design in requestedDesigns)
+            {
+                if (design != null && window.designUiByShip.ContainsKey(design))
+                {
+                    safeDesigns.Add(design);
+                    continue;
+                }
+
+                missingCount++;
+                if (missingSamples.Count < 3)
+                    missingSamples.Add(DesignLogName(design));
+            }
+        }
+
+        int appendedUiOnlyCount = 0;
+        foreach (var element in window.designUiByShip)
+        {
+            Ship design = element.Key;
+            if (design == null || safeDesigns.Contains(design))
+                continue;
+
+            safeDesigns.Add(design);
+            appendedUiOnlyCount++;
+        }
+
+        if (missingCount > 0 || appendedUiOnlyCount > 0 || requestedCount != safeDesigns.Count)
+        {
+            Melon<UADVanillaPlusMod>.Logger.Warning(
+                $"UADVP DesignViewer list mismatch during {context}: " +
+                $"requested={requestedCount}, ui={window.designUiByShip.Count}, safe={safeDesigns.Count}, " +
+                $"missing={missingCount}, uiOnly={appendedUiOnlyCount}, samples=[{string.Join("; ", missingSamples)}].");
+        }
+
+        return safeDesigns;
+    }
+
+    private static bool TrySetDesignImageAndInfo(CampaignFleetWindow window, Il2CppSystem.Collections.Generic.List<Ship> requestedDesigns, Ship nextShip, bool isDesign, string context)
+    {
+        if (SetDesignImageAndInfoForFirstShip == null || window == null)
+            return false;
+
+        Il2CppSystem.Collections.Generic.List<Ship> safeDesigns = BuildUiBackedDesignList(window, requestedDesigns, context);
+        Ship safeNextShip = nextShip;
+        if (safeNextShip != null && !window.designUiByShip.ContainsKey(safeNextShip))
+        {
+            Melon<UADVanillaPlusMod>.Logger.Warning(
+                $"UADVP DesignViewer stale selection during {context}: selected={DesignLogName(safeNextShip)} is not present in designUiByShip; clearing selection.");
+            safeNextShip = null;
+            SelectedViewedDesign = null;
+        }
+
+        try
+        {
+            object?[] args = { safeDesigns, safeNextShip, isDesign };
+            SetDesignImageAndInfoForFirstShip.Invoke(window, args);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Exception detail = ex is TargetInvocationException && ex.InnerException != null ? ex.InnerException : ex;
+            Melon<UADVanillaPlusMod>.Logger.Warning(
+                $"UADVP DesignViewer SetDesignImageAndInfo failed during {context}: " +
+                $"selected={DesignLogName(safeNextShip)}, safeCount={safeDesigns.Count}, ui={window.designUiByShip?.Count ?? 0}, " +
+                $"{detail.GetType().Name}: {detail.Message}");
+            return false;
+        }
+    }
+
+    private static string DesignLogName(Ship ship)
+    {
+        if (ship == null)
+            return "<null>";
+
+        try
+        {
+            return $"{ship.Name(false, false, false, false, true)} ({ShipClassLabel(ship)} {ShipDesignYear(ship)})";
+        }
+        catch
+        {
+            return "<unprintable>";
+        }
+    }
+
     private static void RefreshViewedDesigns(CampaignFleetWindow window, bool allowActions)
     {
         Player player = GetCurrentDesignViewerPlayer();
@@ -783,9 +878,10 @@ internal static class CampaignFleetWindowDesignViewerPatch
             var designs = GetViewedDesigns(player);
             ClearCurrentDesignList(window);
             RefreshAllShipsUi.Invoke(window, new object[] { true, designs });
-            SetDesignImageAndInfoForFirstShip?.Invoke(window, new object[] { designs, null, true });
+            var uiBackedDesigns = BuildUiBackedDesignList(window, designs, $"refresh {player.Name(false)}");
+            TrySetDesignImageAndInfo(window, uiBackedDesigns, null, true, $"refresh {player.Name(false)}");
 
-            AttachDesignSelectionHandlers(window, designs, allowActions);
+            AttachDesignSelectionHandlers(window, uiBackedDesigns, allowActions);
             SetForeignDesignButtonsInteractable(window, allowActions);
             RebuildDesignRefitButton(window, allowActions);
             InstallDesignDeleteButtonHandler(window, allowActions);
@@ -856,6 +952,13 @@ internal static class CampaignFleetWindowDesignViewerPatch
         if (window == null || ship == null || ui == null)
             return;
 
+        if (window.designUiByShip == null || !window.designUiByShip.ContainsKey(ship))
+        {
+            Melon<UADVanillaPlusMod>.Logger.Warning($"UADVP DesignViewer ignored stale design click: {DesignLogName(ship)} is no longer present in designUiByShip.");
+            SelectedViewedDesign = null;
+            return;
+        }
+
         SelectedViewedDesign = ship;
         ui.CurrentShip = ship;
         window.selectedElements.Clear();
@@ -868,7 +971,7 @@ internal static class CampaignFleetWindowDesignViewerPatch
         }
 
         SetShipInfoAndImage?.Invoke(window, new object[] { ship });
-        SetDesignImageAndInfoForFirstShip?.Invoke(window, new object[] { designs, ship, true });
+        TrySetDesignImageAndInfo(window, designs, ship, true, $"select {DesignLogName(ship)}");
         SelectedViewedDesign = ship;
         ui.CurrentShip = ship;
         window.selectedElements.Clear();
