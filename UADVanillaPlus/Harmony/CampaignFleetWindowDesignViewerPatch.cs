@@ -32,7 +32,7 @@ internal static class CampaignFleetWindowDesignViewerPatch
 
     private const float ToolbarStripHeight = 24f;
     private const float ToolbarTopGapMargin = 4f;
-    private const float ToolbarFallbackTopOffset = 42f;
+    private const float ToolbarFallbackTopOffset = 18f;
     private const float ContentTopGap = 32f;
 
     private static Player? designViewerPlayer;
@@ -200,8 +200,11 @@ internal static class CampaignFleetWindowDesignViewerPatch
                 float centerFromTop = gap * 0.5f;
                 float minCenterFromTop = ToolbarTopGapMargin + ToolbarStripHeight * 0.5f;
                 float maxCenterFromTop = gap - minCenterFromTop;
-                yFromTop = -Mathf.Clamp(centerFromTop, minCenterFromTop, maxCenterFromTop);
+                // Keep the selector in the window's top information band. Centering
+                // the whole gap can overlap the column header on some resolutions.
+                yFromTop = -Mathf.Min(ToolbarFallbackTopOffset, maxCenterFromTop);
             }
+
         }
 
         rect.anchoredPosition = new Vector2(0f, yFromTop);

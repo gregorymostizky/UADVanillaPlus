@@ -15,9 +15,13 @@ internal static class PlayerExtensions
             yield break;
         }
 
-        foreach (Ship ship in vessels)
+        foreach (var vessel in vessels)
         {
-            if (ship != null)
+            if (vessel == null || vessel.vesselType != VesselEntity.VesselType.Ship)
+                continue;
+
+            Ship? ship = vessel.TryCast<Ship>();
+            if (ship != null && !ship.isDesign)
                 yield return ship;
         }
     }
