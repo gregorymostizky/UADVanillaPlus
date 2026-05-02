@@ -6,7 +6,7 @@ Current version: `0.1.2`
 
 ## Installation
 
-1. Install MelonLoader for Ultimate Admiral: Dreadnoughts.
+1. Install [MelonLoader](https://github.com/LavaGang/MelonLoader) for Ultimate Admiral: Dreadnoughts.
 2. Download the latest `UADVanillaPlus.dll` from the repository releases page.
 3. Copy `UADVanillaPlus.dll` into your game `Mods` folder.
 
@@ -48,3 +48,7 @@ To build and copy directly into the game's `Mods` folder:
 ```powershell
 dotnet build .\UADVanillaPlus.sln -c Release /p:DeployOnBuild=true
 ```
+
+## Thanks
+
+UAD Vanilla Plus is inspired by the work of the [Tweaks and Fixes / UAD Realism DIP team](https://github.com/DukeDagor/UADRealismDIP), especially as a reference for how Ultimate Admiral: Dreadnoughts modding works.
