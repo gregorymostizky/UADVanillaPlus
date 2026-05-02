@@ -10,12 +10,18 @@ internal static class ModSettings
 {
     private const string PortStrikeBalancedKey = "uadvp_port_strike_balanced";
     private const string BattleWeatherAlwaysSunnyKey = "uadvp_battle_weather_always_sunny";
+    private const string MajorShipTorpedoesRestrictedKey = "uadvp_major_ship_torpedoes_restricted";
+
+    private static bool? portStrikeBalanced;
+    private static bool? battleWeatherAlwaysSunny;
+    private static bool? majorShipTorpedoesRestricted;
 
     internal static bool PortStrikeBalanced
     {
-        get => PlayerPrefs.GetInt(PortStrikeBalancedKey, 1) != 0;
+        get => portStrikeBalanced ??= PlayerPrefs.GetInt(PortStrikeBalancedKey, 1) != 0;
         set
         {
+            portStrikeBalanced = value;
             PlayerPrefs.SetInt(PortStrikeBalancedKey, value ? 1 : 0);
             PlayerPrefs.Save();
             Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP option: Port Strike mode {(value ? "Balanced" : "Vanilla")}.");
@@ -24,12 +30,25 @@ internal static class ModSettings
 
     internal static bool BattleWeatherAlwaysSunny
     {
-        get => PlayerPrefs.GetInt(BattleWeatherAlwaysSunnyKey, 1) != 0;
+        get => battleWeatherAlwaysSunny ??= PlayerPrefs.GetInt(BattleWeatherAlwaysSunnyKey, 1) != 0;
         set
         {
+            battleWeatherAlwaysSunny = value;
             PlayerPrefs.SetInt(BattleWeatherAlwaysSunnyKey, value ? 1 : 0);
             PlayerPrefs.Save();
             Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP option: Battle Weather mode {(value ? "Always Sunny" : "Vanilla")}.");
+        }
+    }
+
+    internal static bool MajorShipTorpedoesRestricted
+    {
+        get => majorShipTorpedoesRestricted ??= PlayerPrefs.GetInt(MajorShipTorpedoesRestrictedKey, 1) != 0;
+        set
+        {
+            majorShipTorpedoesRestricted = value;
+            PlayerPrefs.SetInt(MajorShipTorpedoesRestrictedKey, value ? 1 : 0);
+            PlayerPrefs.Save();
+            Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP option: CA+ Torpedoes mode {(value ? "Disallowed" : "Vanilla")}.");
         }
     }
 }

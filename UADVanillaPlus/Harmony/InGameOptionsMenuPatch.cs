@@ -26,6 +26,7 @@ internal static class InGameOptionsMenuPatch
     private const string ContentName = "UADVP_OptionsContent";
     private const string BattleWeatherOptionName = "UADVP_Option_BattleWeather";
     private const string PortStrikeOptionName = "UADVP_Option_PortStrike";
+    private const string MajorShipTorpedoesOptionName = "UADVP_Option_MajorShipTorpedoes";
 
     private static readonly Color Background = new(0f, 0f, 0f, 0.94f);
     private static readonly Color RowBackground = new(0.09f, 0.09f, 0.09f, 0.96f);
@@ -273,6 +274,14 @@ internal static class InGameOptionsMenuPatch
                     ("Balanced", ModSettings.PortStrikeBalanced, () => SetPortStrikeMode(true)),
                     ("Vanilla", !ModSettings.PortStrikeBalanced, () => SetPortStrikeMode(false)));
                 break;
+            case Section.ShipDesign:
+                AddSegmentedOption(
+                    pane.transform,
+                    MajorShipTorpedoesOptionName,
+                    "CA+ Torpedoes",
+                    ("Disallowed", ModSettings.MajorShipTorpedoesRestricted, () => SetMajorShipTorpedoesMode(true)),
+                    ("Vanilla", !ModSettings.MajorShipTorpedoesRestricted, () => SetMajorShipTorpedoesMode(false)));
+                break;
         }
     }
 
@@ -390,6 +399,15 @@ internal static class InGameOptionsMenuPatch
         RefreshLauncherButton();
     }
 
+    private static void SetMajorShipTorpedoesMode(bool restricted)
+    {
+        if (ModSettings.MajorShipTorpedoesRestricted != restricted)
+            ModSettings.MajorShipTorpedoesRestricted = restricted;
+
+        RefreshMenu();
+        RefreshLauncherButton();
+    }
+
     private static void RefreshMenu()
     {
         if (contentRoot == null)
@@ -417,7 +435,7 @@ internal static class InGameOptionsMenuPatch
     }
 
     private static bool AnyBalanceOptionEnabled()
-        => ModSettings.BattleWeatherAlwaysSunny || ModSettings.PortStrikeBalanced;
+        => ModSettings.BattleWeatherAlwaysSunny || ModSettings.PortStrikeBalanced || ModSettings.MajorShipTorpedoesRestricted;
 
     private static void AddLauncherTooltip(GameObject buttonObject)
     {
@@ -428,7 +446,7 @@ internal static class InGameOptionsMenuPatch
                 return;
 
             G.ui.ShowTooltip(
-                $"UAD:VP Options\nBattle Weather: {BattleWeatherModeText(ModSettings.BattleWeatherAlwaysSunny)}\nPort Strike: {PortStrikeModeText(ModSettings.PortStrikeBalanced)}",
+                $"UAD:VP Options\nBattle Weather: {BattleWeatherModeText(ModSettings.BattleWeatherAlwaysSunny)}\nPort Strike: {PortStrikeModeText(ModSettings.PortStrikeBalanced)}\nCA+ Torpedoes: {MajorShipTorpedoesModeText(ModSettings.MajorShipTorpedoesRestricted)}",
                 buttonObject);
         });
 
@@ -575,6 +593,9 @@ internal static class InGameOptionsMenuPatch
 
     private static string PortStrikeModeText(bool balanced)
         => balanced ? "Balanced" : "Vanilla";
+
+    private static string MajorShipTorpedoesModeText(bool restricted)
+        => restricted ? "Disallowed" : "Vanilla";
 
     private static void SetMenuButtonText(GameObject buttonObject, string text)
     {
