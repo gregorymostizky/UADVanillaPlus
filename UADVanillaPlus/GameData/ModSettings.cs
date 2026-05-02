@@ -9,6 +9,7 @@ namespace UADVanillaPlus.GameData;
 internal static class ModSettings
 {
     private const string PortStrikeBalancedKey = "uadvp_port_strike_balanced";
+    private const string BattleWeatherAlwaysSunnyKey = "uadvp_battle_weather_always_sunny";
 
     internal static bool PortStrikeBalanced
     {
@@ -18,6 +19,17 @@ internal static class ModSettings
             PlayerPrefs.SetInt(PortStrikeBalancedKey, value ? 1 : 0);
             PlayerPrefs.Save();
             Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP option: Port Strike mode {(value ? "Balanced" : "Vanilla")}.");
+        }
+    }
+
+    internal static bool BattleWeatherAlwaysSunny
+    {
+        get => PlayerPrefs.GetInt(BattleWeatherAlwaysSunnyKey, 1) != 0;
+        set
+        {
+            PlayerPrefs.SetInt(BattleWeatherAlwaysSunnyKey, value ? 1 : 0);
+            PlayerPrefs.Save();
+            Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP option: Battle Weather mode {(value ? "Always Sunny" : "Vanilla")}.");
         }
     }
 }

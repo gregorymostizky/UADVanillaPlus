@@ -2,7 +2,7 @@
 
 UAD Vanilla Plus (`UAD:VP`) is a lightweight mod for Ultimate Admiral: Dreadnoughts that keeps the base game feel while adding small quality-of-life improvements.
 
-Current version: `0.1.13`
+Current version: `0.1.19`
 
 ## Philosophy
 
@@ -27,13 +27,38 @@ Start the game normally after copying the DLL. If the mod loads, `UAD:VP` and th
 
 ## Features
 
-- Designs tab country viewer: browse major AI nations' ship designs from the campaign Designs tab.
-  - Shows ship counts for each design, including active, building, and unavailable ships.
+### Campaign
+
+QoL:
+
 - In-game options menu: control UAD:VP balance options from the top-right game UI.
-- Port Strike balance: scales transport losses from undefended port strikes by attacker tonnage instead of allowing small raiders to destroy large transport groups.
 - Campaign construction summaries: split own builds, foreign contracts, and commissioning ships in the existing build counts.
 - Declare War politics action: add a direct Declare War button with confirmation to campaign politics rows.
+
+Balance:
+
+- Port Strike balance: scales transport losses from undefended port strikes by attacker tonnage instead of allowing small raiders to destroy large transport groups.
+
+### Design
+
+QoL:
+
+- Designs tab country viewer: browse major AI nations' ship designs from the campaign Designs tab.
+- Design ship counts: show active, building, and unavailable ships for each design.
+
+Balance:
+
+- None yet.
+
+### Battle
+
+QoL:
+
 - Battle speed quality-of-life: keep the player's selected battle speed available when the game tries to slow simulation speed near enemies.
+
+Balance:
+
+- Battle weather balance: optionally force daytime fair-weather battles instead of random time and bad-weather rolls.
 
 ## Building And Running From Source
 

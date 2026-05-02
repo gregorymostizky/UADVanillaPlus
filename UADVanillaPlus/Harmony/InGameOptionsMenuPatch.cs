@@ -8,20 +8,37 @@ using UnityEngine.UI;
 
 namespace UADVanillaPlus.Harmony;
 
-// Patch intent: expose VP balance toggles in-game instead of requiring config
-// files. This first pass ports only the menu shell and option state; no gameplay
-// feature reads the Port Strike balance toggle yet.
+// Patch intent: expose VP balance controls in a vanilla-like settings panel.
+// Options are grouped by gameplay area so future toggles and multi-choice
+// controls can be added without turning the menu into a flat debug list.
 [HarmonyPatch(typeof(Ui))]
 internal static class InGameOptionsMenuPatch
 {
+    private enum Section
+    {
+        Battle,
+        Campaign,
+        ShipDesign,
+    }
+
     private const string ButtonName = "UADVP_OptionsButton";
     private const string MenuName = "UADVP Options";
-    private const string PortStrikeOptionName = "UADVP_Option_Port_Strike";
+    private const string ContentName = "UADVP_OptionsContent";
+    private const string BattleWeatherOptionName = "UADVP_Option_BattleWeather";
+    private const string PortStrikeOptionName = "UADVP_Option_PortStrike";
+
+    private static readonly Color Background = new(0f, 0f, 0f, 0.94f);
+    private static readonly Color RowBackground = new(0.09f, 0.09f, 0.09f, 0.96f);
+    private static readonly Color SelectedGold = new(0.58f, 0.44f, 0.2f, 0.95f);
+    private static readonly Color SegmentIdle = new(0.28f, 0.27f, 0.2f, 0.9f);
+    private static readonly Color SegmentDisabled = new(0.12f, 0.12f, 0.1f, 0.82f);
 
     private static Button? launcherButton;
     private static Image? launcherImage;
     private static Outline? launcherOutline;
     private static GameObject? menu;
+    private static GameObject? contentRoot;
+    private static Section selectedSection = Section.Battle;
     private static bool initialized;
     private static float nextRetryTime;
 
@@ -110,6 +127,7 @@ internal static class InGameOptionsMenuPatch
         {
             menu.transform.SetAsLastSibling();
             menu.SetActive(true);
+            RefreshMenu();
             if (launcherButton != null)
                 launcherButton.interactable = false;
             return;
@@ -148,22 +166,240 @@ internal static class InGameOptionsMenuPatch
             return;
         }
 
-        ClearWindowButtons(window);
-        AddMenuButton(window, "Port Strike", true, TogglePortStrikeMode);
-        AddMenuButton(window, "Close", false, CloseMenu);
-        RefreshMenuLabels();
-
+        BuildSettingsWindow(window);
         menu.transform.SetAsLastSibling();
         menu.SetActive(true);
         if (launcherButton != null)
             launcherButton.interactable = false;
     }
 
-    private static void TogglePortStrikeMode()
+    private static void BuildSettingsWindow(GameObject window)
     {
-        ModSettings.PortStrikeBalanced = !ModSettings.PortStrikeBalanced;
-        RefreshMenuLabels();
+        ClearChildren(window);
+        ConfigureWindow(window);
+
+        contentRoot = new GameObject(ContentName);
+        contentRoot.transform.SetParent(window.transform, false);
+        RectTransform contentRect = contentRoot.AddComponent<RectTransform>();
+        contentRect.anchorMin = Vector2.zero;
+        contentRect.anchorMax = Vector2.one;
+        contentRect.offsetMin = new Vector2(32f, 28f);
+        contentRect.offsetMax = new Vector2(-32f, -28f);
+
+        VerticalLayoutGroup contentLayout = contentRoot.AddComponent<VerticalLayoutGroup>();
+        contentLayout.spacing = 18f;
+        contentLayout.childControlHeight = true;
+        contentLayout.childControlWidth = true;
+        contentLayout.childForceExpandHeight = false;
+        contentLayout.childForceExpandWidth = true;
+
+        Text title = AddText(contentRoot.transform, "UAD:VP Options", 18, TextAnchor.MiddleLeft);
+        title.name = "UADVP_OptionsTitle";
+        AddLayout(title.gameObject, minHeight: 24f, preferredHeight: 24f, flexibleWidth: 1f);
+
+        GameObject body = new("UADVP_OptionsBody");
+        body.transform.SetParent(contentRoot.transform, false);
+        HorizontalLayoutGroup bodyLayout = body.AddComponent<HorizontalLayoutGroup>();
+        bodyLayout.spacing = 12f;
+        bodyLayout.childControlHeight = true;
+        bodyLayout.childControlWidth = true;
+        bodyLayout.childForceExpandHeight = true;
+        bodyLayout.childForceExpandWidth = true;
+        AddLayout(body, minHeight: 205f, flexibleHeight: 1f, flexibleWidth: 1f);
+
+        BuildSectionList(body.transform);
+        BuildSectionPane(body.transform);
+
+        GameObject footer = new("UADVP_OptionsFooter");
+        footer.transform.SetParent(contentRoot.transform, false);
+        HorizontalLayoutGroup footerLayout = footer.AddComponent<HorizontalLayoutGroup>();
+        footerLayout.childAlignment = TextAnchor.MiddleRight;
+        footerLayout.childControlWidth = false;
+        footerLayout.childControlHeight = true;
+        footerLayout.childForceExpandWidth = true;
+        footerLayout.spacing = 10f;
+        AddLayout(footer, minHeight: 26f, flexibleWidth: 1f);
+        AddActionButton(footer.transform, "Close", CloseMenu, width: 105f);
+    }
+
+    private static void BuildSectionList(Transform parent)
+    {
+        GameObject sections = new("UADVP_OptionsSections");
+        sections.transform.SetParent(parent, false);
+        VerticalLayoutGroup layout = sections.AddComponent<VerticalLayoutGroup>();
+        layout.spacing = 4f;
+        layout.childControlHeight = true;
+        layout.childControlWidth = true;
+        layout.childForceExpandHeight = false;
+        layout.childForceExpandWidth = true;
+        AddLayout(sections, minWidth: 112f, preferredWidth: 112f, flexibleHeight: 1f);
+
+        AddSectionButton(sections.transform, Section.Battle, "Battle");
+        AddSectionButton(sections.transform, Section.Campaign, "Campaign");
+        AddSectionButton(sections.transform, Section.ShipDesign, "Ship Design");
+    }
+
+    private static void BuildSectionPane(Transform parent)
+    {
+        GameObject pane = new("UADVP_OptionsPane");
+        pane.transform.SetParent(parent, false);
+        Image paneImage = pane.AddComponent<Image>();
+        paneImage.color = new Color(0f, 0f, 0f, 0.12f);
+        VerticalLayoutGroup layout = pane.AddComponent<VerticalLayoutGroup>();
+        layout.spacing = 6f;
+        layout.childControlHeight = true;
+        layout.childControlWidth = true;
+        layout.childForceExpandHeight = false;
+        layout.childForceExpandWidth = true;
+        AddLayout(pane, flexibleWidth: 1f, flexibleHeight: 1f);
+
+        AddText(pane.transform, SectionTitle(selectedSection), 15, TextAnchor.MiddleLeft);
+
+        switch (selectedSection)
+        {
+            case Section.Battle:
+                AddSegmentedOption(
+                    pane.transform,
+                    BattleWeatherOptionName,
+                    "Battle Weather",
+                    ("Always Sunny", ModSettings.BattleWeatherAlwaysSunny, () => SetBattleWeatherMode(true)),
+                    ("Vanilla", !ModSettings.BattleWeatherAlwaysSunny, () => SetBattleWeatherMode(false)));
+                break;
+            case Section.Campaign:
+                AddSegmentedOption(
+                    pane.transform,
+                    PortStrikeOptionName,
+                    "Port Strike",
+                    ("Balanced", ModSettings.PortStrikeBalanced, () => SetPortStrikeMode(true)),
+                    ("Vanilla", !ModSettings.PortStrikeBalanced, () => SetPortStrikeMode(false)));
+                break;
+        }
+    }
+
+    private static void AddSegmentedOption(
+        Transform parent,
+        string name,
+        string label,
+        (string Label, bool Selected, Action OnPress) first,
+        (string Label, bool Selected, Action OnPress) second)
+    {
+        GameObject row = new(name);
+        row.transform.SetParent(parent, false);
+        Image rowImage = row.AddComponent<Image>();
+        rowImage.color = RowBackground;
+        HorizontalLayoutGroup rowLayout = row.AddComponent<HorizontalLayoutGroup>();
+        rowLayout.padding = new RectOffset
+        {
+            left = 8,
+            right = 8,
+            top = 4,
+            bottom = 4,
+        };
+        rowLayout.spacing = 8f;
+        rowLayout.childAlignment = TextAnchor.MiddleCenter;
+        rowLayout.childControlHeight = true;
+        rowLayout.childControlWidth = true;
+        rowLayout.childForceExpandHeight = false;
+        rowLayout.childForceExpandWidth = false;
+        AddLayout(row, minHeight: 34f, preferredHeight: 34f, flexibleWidth: 1f);
+
+        Text labelText = AddText(row.transform, label, 13, TextAnchor.MiddleLeft);
+        AddLayout(labelText.gameObject, minWidth: 155f, flexibleWidth: 1f);
+
+        AddSegmentButton(row.transform, first.Label, first.Selected, first.OnPress);
+        AddSegmentButton(row.transform, second.Label, second.Selected, second.OnPress);
+    }
+
+    private static void AddSectionButton(Transform parent, Section section, string label)
+    {
+        Button button = AddActionButton(parent, label, () => SelectSection(section), width: 102f);
+        Image image = button.GetComponent<Image>() ?? button.gameObject.AddComponent<Image>();
+        image.color = selectedSection == section ? SelectedGold : SegmentIdle;
+    }
+
+    private static void AddSegmentButton(Transform parent, string label, bool selected, Action onPress)
+    {
+        Button button = AddActionButton(parent, label, onPress, width: 112f);
+        Image image = button.GetComponent<Image>() ?? button.gameObject.AddComponent<Image>();
+        image.color = selected ? SelectedGold : SegmentDisabled;
+    }
+
+    private static Button AddActionButton(Transform parent, string label, Action onPress, float width)
+    {
+        GameObject? buttonTemplate = FindPath("Global/Ui/UiMain/Popup/PopupMenu/Window/ButtonBase");
+        GameObject buttonObject = buttonTemplate != null ? UnityEngine.Object.Instantiate(buttonTemplate) : new GameObject($"UADVP_Button_{label}");
+        buttonObject.transform.SetParent(parent, false);
+        buttonObject.name = $"UADVP_Button_{label.Replace(" ", string.Empty)}";
+        buttonObject.SetActive(true);
+        buttonObject.transform.localPosition = Vector3.zero;
+        buttonObject.transform.localScale = Vector3.one;
+        // The vanilla popup button prefab carries tall menu geometry; clamp both
+        // layout and rect height so compact option rows do not balloon vertically.
+        AddLayout(buttonObject, minWidth: width, preferredWidth: width, minHeight: 26f, preferredHeight: 26f, flexibleHeight: 0f);
+        RectTransform? buttonRect = buttonObject.GetComponent<RectTransform>();
+        if (buttonRect != null)
+            buttonRect.sizeDelta = new Vector2(buttonRect.sizeDelta.x, 26f);
+
+        Button button = buttonObject.GetComponent<Button>() ?? buttonObject.AddComponent<Button>();
+        button.onClick.RemoveAllListeners();
+        button.onClick.AddListener(new System.Action(onPress));
+
+        Image image = buttonObject.GetComponent<Image>() ?? buttonObject.AddComponent<Image>();
+        button.targetGraphic = image;
+        SetMenuButtonText(buttonObject, label);
+        return button;
+    }
+
+    private static Text AddText(Transform parent, string text, int fontSize, TextAnchor alignment)
+    {
+        GameObject textObject = new($"UADVP_Text_{text.Replace(" ", string.Empty).Replace(":", string.Empty)}");
+        textObject.transform.SetParent(parent, false);
+        Text uiText = textObject.AddComponent<Text>();
+        uiText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        uiText.fontSize = fontSize;
+        uiText.color = Color.white;
+        uiText.alignment = alignment;
+        uiText.text = text;
+        uiText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        uiText.verticalOverflow = VerticalWrapMode.Overflow;
+        AddLayout(textObject, minHeight: fontSize + 6f, preferredHeight: fontSize + 6f, flexibleWidth: 1f);
+        return uiText;
+    }
+
+    private static void SelectSection(Section section)
+    {
+        selectedSection = section;
+        RefreshMenu();
+    }
+
+    private static void SetBattleWeatherMode(bool alwaysSunny)
+    {
+        if (ModSettings.BattleWeatherAlwaysSunny != alwaysSunny)
+            ModSettings.BattleWeatherAlwaysSunny = alwaysSunny;
+
+        RefreshMenu();
         RefreshLauncherButton();
+    }
+
+    private static void SetPortStrikeMode(bool balanced)
+    {
+        if (ModSettings.PortStrikeBalanced != balanced)
+            ModSettings.PortStrikeBalanced = balanced;
+
+        RefreshMenu();
+        RefreshLauncherButton();
+    }
+
+    private static void RefreshMenu()
+    {
+        if (contentRoot == null)
+            return;
+
+        GameObject? window = Child(menu, "Window");
+        if (window == null)
+            return;
+
+        BuildSettingsWindow(window);
     }
 
     private static void RefreshLauncherButton()
@@ -177,8 +413,11 @@ internal static class InGameOptionsMenuPatch
             launcherImage.color = Color.white;
 
         if (launcherOutline != null)
-            launcherOutline.effectColor = ModSettings.PortStrikeBalanced ? Color.white : new Color(0.55f, 0.55f, 0.55f, 1f);
+            launcherOutline.effectColor = AnyBalanceOptionEnabled() ? Color.white : new Color(0.55f, 0.55f, 0.55f, 1f);
     }
+
+    private static bool AnyBalanceOptionEnabled()
+        => ModSettings.BattleWeatherAlwaysSunny || ModSettings.PortStrikeBalanced;
 
     private static void AddLauncherTooltip(GameObject buttonObject)
     {
@@ -188,7 +427,9 @@ internal static class InGameOptionsMenuPatch
             if (G.ui == null || launcherButton == null || !launcherButton.interactable)
                 return;
 
-            G.ui.ShowTooltip($"UAD:VP Options\nPort Strike: {PortStrikeModeText(ModSettings.PortStrikeBalanced)}", buttonObject);
+            G.ui.ShowTooltip(
+                $"UAD:VP Options\nBattle Weather: {BattleWeatherModeText(ModSettings.BattleWeatherAlwaysSunny)}\nPort Strike: {PortStrikeModeText(ModSettings.PortStrikeBalanced)}",
+                buttonObject);
         });
 
         OnLeave onLeave = buttonObject.AddComponent<OnLeave>();
@@ -218,6 +459,22 @@ internal static class InGameOptionsMenuPatch
         Image bgImage = bg.GetComponent<Image>() ?? bg.AddComponent<Image>();
         bgImage.color = new Color(0f, 0f, 0f, 0.6f);
         bgImage.raycastTarget = true;
+    }
+
+    private static void ConfigureWindow(GameObject window)
+    {
+        Image image = window.GetComponent<Image>() ?? window.AddComponent<Image>();
+        image.color = Background;
+
+        RectTransform? rect = window.GetComponent<RectTransform>();
+        if (rect == null)
+            return;
+
+        rect.anchorMin = new Vector2(0.5f, 0.5f);
+        rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = Vector2.zero;
+        rect.sizeDelta = new Vector2(980f, 390f);
     }
 
     private static void MatchButtonSizing(GameObject target, GameObject template)
@@ -273,51 +530,48 @@ internal static class InGameOptionsMenuPatch
             imageChild.localScale *= 0.67f;
     }
 
-    private static void ClearWindowButtons(GameObject window)
+    private static LayoutElement AddLayout(
+        GameObject target,
+        float minWidth = -1f,
+        float preferredWidth = -1f,
+        float minHeight = -1f,
+        float preferredHeight = -1f,
+        float flexibleWidth = -1f,
+        float flexibleHeight = -1f)
     {
-        for (int i = window.transform.childCount - 1; i >= 0; i--)
+        LayoutElement layout = target.GetComponent<LayoutElement>() ?? target.AddComponent<LayoutElement>();
+        if (minWidth >= 0f)
+            layout.minWidth = minWidth;
+        if (preferredWidth >= 0f)
+            layout.preferredWidth = preferredWidth;
+        if (minHeight >= 0f)
+            layout.minHeight = minHeight;
+        if (preferredHeight >= 0f)
+            layout.preferredHeight = preferredHeight;
+        if (flexibleWidth >= 0f)
+            layout.flexibleWidth = flexibleWidth;
+        if (flexibleHeight >= 0f)
+            layout.flexibleHeight = flexibleHeight;
+        return layout;
+    }
+
+    private static void ClearChildren(GameObject target)
+    {
+        for (int i = target.transform.childCount - 1; i >= 0; i--)
+            UnityEngine.Object.Destroy(target.transform.GetChild(i).gameObject);
+    }
+
+    private static string SectionTitle(Section section)
+        => section switch
         {
-            GameObject child = window.transform.GetChild(i).gameObject;
-            if (child.GetComponent<Button>() != null)
-                UnityEngine.Object.Destroy(child);
-        }
-    }
+            Section.Battle => "Battle",
+            Section.Campaign => "Campaign",
+            Section.ShipDesign => "Ship Design",
+            _ => "Options",
+        };
 
-    private static void AddMenuButton(GameObject window, string label, bool showState, System.Action onPress)
-    {
-        GameObject? buttonTemplate = FindPath("Global/Ui/UiMain/Popup/PopupMenu/Window/ButtonBase");
-        if (buttonTemplate == null)
-            return;
-
-        GameObject buttonObject = UnityEngine.Object.Instantiate(buttonTemplate);
-        buttonObject.transform.SetParent(window.transform, false);
-        buttonObject.name = showState ? PortStrikeOptionName : "UADVP_Options_Close";
-        buttonObject.SetActive(true);
-        buttonObject.transform.localPosition = Vector3.zero;
-        buttonObject.transform.localScale = Vector3.one;
-
-        Button? button = buttonObject.GetComponent<Button>();
-        if (button != null)
-        {
-            button.onClick.RemoveAllListeners();
-            button.onClick.AddListener(new System.Action(onPress));
-        }
-
-        SetMenuButtonText(buttonObject, showState ? OptionLabel(label, ModSettings.PortStrikeBalanced) : label);
-    }
-
-    private static void RefreshMenuLabels()
-    {
-        if (menu == null)
-            return;
-
-        GameObject? option = Child(Child(menu, "Window"), PortStrikeOptionName);
-        if (option != null)
-            SetMenuButtonText(option, OptionLabel("Port Strike", ModSettings.PortStrikeBalanced));
-    }
-
-    private static string OptionLabel(string label, bool balanced)
-        => $"{label}: {PortStrikeModeText(balanced)}";
+    private static string BattleWeatherModeText(bool alwaysSunny)
+        => alwaysSunny ? "Always Sunny" : "Vanilla";
 
     private static string PortStrikeModeText(bool balanced)
         => balanced ? "Balanced" : "Vanilla";
@@ -329,12 +583,19 @@ internal static class InGameOptionsMenuPatch
         {
             RemoveComponent<LocalizeText>(tmp.gameObject);
             tmp.text = text;
+            tmp.alignment = TextAlignmentOptions.Center;
+            tmp.fontSize = 13f;
+            tmp.enableWordWrapping = false;
             return;
         }
 
         Text? uiText = buttonObject.GetComponentInChildren<Text>();
         if (uiText != null)
+        {
             uiText.text = text;
+            uiText.alignment = TextAnchor.MiddleCenter;
+            uiText.fontSize = 12;
+        }
     }
 
     private static void CloseMenu()
