@@ -14,9 +14,16 @@ namespace UADVanillaPlus.Harmony;
 internal static class CampaignConstructionStatusPatch
 {
     private const string ForeignBuildColor = "#9A9A9A";
+    private const string DockIdleColor = "#9A9A9A";
+    private const string DockBuildingColor = "#A7D37A";
+    private const string TransportGoodColor = "#A7D37A";
+    private const string TransportWarnColor = "#D8C06A";
+    private const string TransportBadColor = "#D37A7A";
     private const string ConstructionTooltip = "Shown as own builds / foreign contracts (commissioning).\nForeign contracts are ships this nation's yards are building for another nation.\nCommissioning ships are counted separately from ships still under construction.";
     private static readonly HashSet<GameObject> TooltipTargets = new();
+    private static readonly HashSet<GameObject> DockTooltipTargets = new();
     private static string lastLoggedSummary = string.Empty;
+    private static string lastLoggedMaintenanceSummary = string.Empty;
 
     [HarmonyPrefix]
     [HarmonyPatch(nameof(CampaignCountryInfoUI.GetVesselsBuildingCount))]
@@ -46,6 +53,7 @@ internal static class CampaignConstructionStatusPatch
 
             __instance.BuildingList.text = counts.TypeDisplay;
             EnsureConstructionTooltip(__instance);
+            UpdateMaintenanceStatus(__instance, player, stopwatch);
 
             string summary = $"{counts.TotalDisplay}|{counts.TypeDisplay}";
             if (summary != lastLoggedSummary)
@@ -114,6 +122,67 @@ internal static class CampaignConstructionStatusPatch
             Melon<UADVanillaPlusMod>.Logger.Warning(
                 $"UADVP campaign construction count failed; falling back to vanilla. {ex.GetType().Name}: {ex.Message}");
             return false;
+        }
+    }
+
+    private static void UpdateMaintenanceStatus(CampaignCountryInfoUI ui, Player player, Stopwatch stopwatch)
+    {
+        if (ui.ShipyardSize == null || player == null)
+            return;
+
+        DockyardStatus status = BuildDockyardStatus(player);
+        TransportCapacityStatus transport = BuildTransportCapacityStatus(player);
+
+        ui.ShipyardSize.text = $"{ui.ShipyardSize.text}\n{status.Display} | {transport.Display}";
+        EnsureDockyardTooltip(ui);
+
+        string summary = $"{status.LogSummary}; {transport.LogSummary}";
+        if (summary != lastLoggedMaintenanceSummary)
+        {
+            lastLoggedMaintenanceSummary = summary;
+            Melon<UADVanillaPlusMod>.Logger.Msg(
+                $"UADVP campaign maintenance status: displayed {summary} in {stopwatch.ElapsedMilliseconds} ms.");
+        }
+    }
+
+    private static DockyardStatus BuildDockyardStatus(Player player)
+    {
+        if (player.shipyardBuildMonthLeft <= 0 || player.shipyardBuildMonthTotal <= 0)
+        {
+            return new DockyardStatus(
+                $"<color={DockIdleColor}>Dock Idle</color>",
+                "Dock expansion is not currently active.",
+                "idle");
+        }
+
+        int elapsed = Math.Max(0, player.shipyardBuildMonthTotal - player.shipyardBuildMonthLeft);
+        string months = $"{elapsed}/{player.shipyardBuildMonthTotal} mo";
+        string amount = FormatWeightSafe(player.shipyardTotalBuildAmount);
+        return new DockyardStatus(
+            $"<color={DockBuildingColor}>Dock Expanding: {months}</color>",
+            $"Dock expansion is active.\nRemaining: {player.shipyardBuildMonthLeft} months\nPlanned increase: {amount}",
+            $"expanding {months}, left {player.shipyardBuildMonthLeft}, amount {amount}");
+    }
+
+    private static TransportCapacityStatus BuildTransportCapacityStatus(Player player)
+    {
+        float capacity = player.transportCapacity;
+        float percent = capacity <= 3f ? capacity * 100f : capacity;
+        string color = percent >= 190f ? TransportGoodColor : percent >= 150f ? TransportWarnColor : TransportBadColor;
+        string display = $"<color={color}>TR {percent:0}%</color>";
+        string tooltip = $"Transport capacity: {percent:0}%\nTarget: keep this near 200% when possible.";
+        return new TransportCapacityStatus(display, tooltip, $"transport {percent:0}%");
+    }
+
+    private static string FormatWeightSafe(float tons)
+    {
+        try
+        {
+            return Ui.FormatWeight(tons, true, false);
+        }
+        catch
+        {
+            return $"{Mathf.RoundToInt(tons):N0} t";
         }
     }
 
@@ -188,6 +257,11 @@ internal static class CampaignConstructionStatusPatch
         AddTooltip(ui.BuildingList?.gameObject);
     }
 
+    private static void EnsureDockyardTooltip(CampaignCountryInfoUI ui)
+    {
+        AddDockTooltip(ui.ShipyardSize?.gameObject);
+    }
+
     private static void AddTooltip(GameObject? target)
     {
         if (target == null || TooltipTargets.Contains(target))
@@ -197,6 +271,27 @@ internal static class CampaignConstructionStatusPatch
 
         OnEnter onEnter = target.AddComponent<OnEnter>();
         onEnter.action = new System.Action(() => G.ui.ShowTooltip(ConstructionTooltip, target));
+
+        OnLeave onLeave = target.AddComponent<OnLeave>();
+        onLeave.action = new System.Action(() => G.ui.HideTooltip());
+    }
+
+    private static void AddDockTooltip(GameObject? target)
+    {
+        if (target == null || DockTooltipTargets.Contains(target))
+            return;
+
+        DockTooltipTargets.Add(target);
+
+        OnEnter onEnter = target.AddComponent<OnEnter>();
+        onEnter.action = new System.Action(() =>
+        {
+            Player? player = PlayerController.Instance;
+            string tooltip = player == null
+                ? "Campaign maintenance status unavailable."
+                : $"{BuildDockyardStatus(player).Tooltip}\n\n{BuildTransportCapacityStatus(player).Tooltip}";
+            G.ui.ShowTooltip(tooltip, target);
+        });
 
         OnLeave onLeave = target.AddComponent<OnLeave>();
         onLeave.action = new System.Action(() => G.ui.HideTooltip());
@@ -226,6 +321,10 @@ internal static class CampaignConstructionStatusPatch
     }
 
     private readonly record struct ConstructionCounts(string TotalDisplay, string TypeDisplay);
+
+    private readonly record struct DockyardStatus(string Display, string Tooltip, string LogSummary);
+
+    private readonly record struct TransportCapacityStatus(string Display, string Tooltip, string LogSummary);
 
     private struct TypeCounts
     {

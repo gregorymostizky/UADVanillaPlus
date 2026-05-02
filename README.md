@@ -2,7 +2,7 @@
 
 UAD Vanilla Plus (`UAD:VP`) is a lightweight mod for Ultimate Admiral: Dreadnoughts that keeps the base game feel while adding small quality-of-life improvements.
 
-Current version: `0.1.20`
+Current version: `0.1.26`
 
 ## Philosophy
 
@@ -10,6 +10,7 @@ Current version: `0.1.20`
 - No config files: installation should stay as simple as one DLL in the `Mods` folder.
 - Quality-of-life changes are always enabled.
 - Balance changes default to improved behavior and can be turned off individually from the in-game UAD:VP options menu.
+- Balance changes are intended to make the game feel more fair: fewer extreme edge cases, fewer unrealistic exploits, and fewer outcomes where the player or AI gets punished by hidden or overly swingy mechanics.
 
 ## Installation
 
@@ -29,34 +30,37 @@ Start the game normally after copying the DLL. If the mod loads, `UAD:VP` and th
 
 ### Campaign
 
-QoL:
+**QoL:**
 
-- In-game options menu: control UAD:VP balance options from the top-right game UI.
+- Campaign maintenance indicators: show dock expansion status and transport capacity directly in the campaign country info panel.
+- Campaign active fleet port count: show how many active vessels are currently in port.
 - Campaign construction summaries: split own builds, foreign contracts, and commissioning ships in the existing build counts.
+- Campaign technology indicator: show a compact estimate for the next expected research discovery.
 - Declare War politics action: add a direct Declare War button with confirmation to campaign politics rows.
+- In-game options menu: control UAD:VP balance options from the top-right game UI.
 
-Balance:
+**Balance:**
 
 - Port Strike balance: scales transport losses from undefended port strikes by attacker tonnage instead of allowing small raiders to destroy large transport groups.
 
 ### Design
 
-QoL:
+**QoL:**
 
-- Designs tab country viewer: browse major AI nations' ship designs from the campaign Designs tab.
 - Design ship counts: show active, building, and unavailable ships for each design.
+- Designs tab country viewer: browse major AI nations' ship designs from the campaign Designs tab.
 
-Balance:
+**Balance:**
 
 - CA+ torpedo restriction: optionally disallow torpedo launchers on heavy cruisers, battlecruisers, and battleships.
 
 ### Battle
 
-QoL:
+**QoL:**
 
 - Battle speed quality-of-life: keep the player's selected battle speed available when the game tries to slow simulation speed near enemies.
 
-Balance:
+**Balance:**
 
 - Battle weather balance: optionally force daytime fair-weather battles instead of random time and bad-weather rolls.
 

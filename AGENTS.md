@@ -4,13 +4,14 @@
 
 - Bump `UADVanillaPlus/ModInfo.cs` `MelonVersion` for every user-visible code or behavior change.
 - Keep the in-game overlay version and MelonLoader metadata consistent through `ModInfo.DisplayText`.
-- For copy requests, copy the built DLL directly to the game `Mods` folder. Do not check whether the game is running first; if the DLL is locked, let the copy fail and report that.
+- For copy requests, always try the built-DLL copy immediately. Copy directly to the game `Mods` folder without first checking whether the game is running; if the DLL is locked, let the copy fail and report that.
 - Keep feature ports modular. Each QoL port or gameplay change should ideally live in its own source file under a clear folder, with only small shared helpers in `GameData` or similar common areas.
 - Do not add loose config files for player-facing balance options. Balance-affecting features should be controlled through the in-game VP options menu, with shared option state living behind a typed helper in `GameData`.
 - Keep QoL changes always enabled, while balance changes default to improved/on and can be toggled individually back to vanilla in-game.
 - Port only the requested behavior from TAF/DIP. Avoid pulling unrelated config systems, UI rewrites, fleet tab changes, data edits, or gameplay logic as hidden dependencies.
 - Prefer VP names for new UI objects and logs, such as `UADVP_...`, rather than carrying over `TAF_...` names.
 - Update `README.md` when adding major player-facing features, installation changes, or source-build workflow changes. Keep README consumer-friendly: describe the main feature value, not every implementation detail or internal versioning rule.
+- Order README feature bullets by user value/impact within each subsection, not by implementation chronology. Use judgment: frequently checked, high-friction, or high-consequence gameplay improvements should appear before smaller conveniences.
 - Never commit or push to `master` unless the user explicitly asks for that action.
 - For development work, truth-seek against the available game disassembly before guessing how UAD works. The workspace has both skeleton/diffable and fuller IL views available at `E:\Codex\cpp2il_uad_diffable` and `E:\Codex\cpp2il_uad_isil`; inspect the relevant game classes/methods there when behavior or signatures are uncertain.
 - Be performance-conscious by default. One of VP's goals is to avoid TAF/DIP-style overhead, so watch for hot paths, broad polling, expensive UI rebuilds, repeated reflection, allocations in frequent hooks, and large data scans. Push back when a requested idea is likely to hurt performance, and prefer designs that cache, narrow scope, or hook less frequently.
@@ -35,11 +36,16 @@ Copy-Item -LiteralPath 'E:\Codex\UADVanillaPlus\UADVanillaPlus\bin\Release\net6.
 ## Current Feature Layout
 
 - `Harmony/UiVersionTextPatch.cs`: version text overlay only.
-- `Harmony/CampaignFleetWindowDesignViewerPatch.cs`: Designs tab country viewer only.
-- `Harmony/CampaignConstructionStatusPatch.cs`: campaign construction summary/count display only.
+- `Harmony/CampaignFleetWindowDesignViewerPatch.cs`: Designs tab country viewer and design ship-count display only.
+- `Harmony/CampaignConstructionStatusPatch.cs`: campaign construction summary/count display plus campaign maintenance indicators only.
+- `Harmony/CampaignActiveFleetStatusPatch.cs`: campaign Active Fleet in-port count display only.
+- `Harmony/CampaignTechnologyStatusPatch.cs`: campaign country-info technology timing indicator only.
 - `Harmony/InGameOptionsMenuPatch.cs`: top-right UAD:VP in-game options menu only.
 - `Harmony/CampaignPoliticsDeclareWarPatch.cs`: politics row Declare War button only.
 - `Harmony/BattleTimeSpeedLimitPatch.cs`: battle simulation speed limit QoL only.
+- `Harmony/BattleWeatherBalancePatch.cs`: battle weather/daytime balance option only.
+- `Harmony/PortStrikeBalancePatch.cs`: port strike transport-loss balance option only.
+- `Harmony/DesignTorpedoRestrictionPatch.cs`: CA+ torpedo availability balance option only.
 - `GameData/CampaignDiplomacyActions.cs`: small diplomacy validation/action helpers for campaign politics patches.
 - `GameData/ExtraGameData.cs`: small campaign/player lookup helpers.
 - `GameData/ModSettings.cs`: typed in-game option state only; feature patches should read options from here instead of parsing files.
