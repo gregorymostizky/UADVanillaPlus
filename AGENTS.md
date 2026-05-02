@@ -34,6 +34,7 @@ Copy-Item -LiteralPath 'E:\Codex\UADVanillaPlus\UADVanillaPlus\bin\Release\net6.
 
 - `Harmony/UiVersionTextPatch.cs`: version text overlay only.
 - `Harmony/CampaignFleetWindowDesignViewerPatch.cs`: Designs tab country viewer only.
+- `Harmony/CampaignConstructionStatusPatch.cs`: campaign construction summary/count display only.
 - `Harmony/CampaignPoliticsDeclareWarPatch.cs`: politics row Declare War button only.
 - `Harmony/BattleTimeSpeedLimitPatch.cs`: battle simulation speed limit QoL only.
 - `GameData/CampaignDiplomacyActions.cs`: small diplomacy validation/action helpers for campaign politics patches.

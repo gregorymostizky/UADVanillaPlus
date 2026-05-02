@@ -2,7 +2,7 @@
 
 UAD Vanilla Plus (`UAD:VP`) is a lightweight mod for Ultimate Admiral: Dreadnoughts that keeps the base game feel while adding small quality-of-life improvements.
 
-Current version: `0.1.6`
+Current version: `0.1.7`
 
 ## Installation
 
@@ -21,6 +21,7 @@ Start the game normally after copying the DLL. If the mod loads, `UAD:VP` and th
 ## Features
 
 - Designs tab country viewer: browse major AI nations' ship designs from the campaign Designs tab.
+- Campaign construction summaries: include commissioning ships in the existing build counts.
 - Declare War politics action: add a direct Declare War button with confirmation to campaign politics rows.
 - Battle speed quality-of-life: keep the player's selected battle speed available when the game tries to slow simulation speed near enemies.
 
