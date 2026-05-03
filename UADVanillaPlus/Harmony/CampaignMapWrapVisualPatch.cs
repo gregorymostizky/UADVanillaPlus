@@ -10,8 +10,9 @@ using UnityEngine.UI;
 namespace UADVanillaPlus.Harmony;
 
 // Experimental campaign-map wrap illusion. This intentionally duplicates the
-// rendered map surface and passive visual layers, then selectively proxies
-// map interactions that can safely be mirrored into side-map space.
+// rendered map surface and passive visual layers only at the visible seam,
+// then selectively proxies map interactions that can safely be mirrored into
+// side-map space.
 [HarmonyPatch(typeof(CampaignMap))]
 internal static class CampaignMapWrapVisualPatch
 {
@@ -26,13 +27,17 @@ internal static class CampaignMapWrapVisualPatch
     private const int MovementDiagnosticFrameWindow = 900;
     private const int MovementDiagnosticsMaxPerClick = 1;
     private const float RoutingProxyEdgeOffset = 0.05f;
+    private const float VisibleSideMapPadding = 1.5f;
 
     private static readonly List<GameObject> WrapObjects = new();
+    private static readonly Dictionary<int, List<GameObject>> StaticLapObjects = new();
     private static readonly Dictionary<IntPtr, DynamicMarkerCopySet> DynamicMarkerCopies = new();
     private static readonly Dictionary<IntPtr, RouteCopySet> RouteCopies = new();
     private static bool CreatedCountryOverlayCopies;
     private static bool LoggedDynamicMarkerCopies;
     private static bool LoggedRouteCopies;
+    private static bool LeftLapVisible;
+    private static bool RightLapVisible;
     private static bool LastMapClickWasWrapped;
     private static float ActiveTaskForceMapOffset;
     private static Vector3 ActiveTaskForceVisualPosition;
@@ -86,6 +91,7 @@ internal static class CampaignMapWrapVisualPatch
         if (!ModSettings.CampaignMapWraparoundEnabled || CampaignMap.Instance == null)
             return;
 
+        RefreshVisibleSideMaps(Cam.Instance);
         SyncRouteCopyVisuals();
 
         if (Time.frameCount - LastDynamicCleanupFrame >= DynamicCleanupFrameInterval)
@@ -112,7 +118,7 @@ internal static class CampaignMapWrapVisualPatch
         if (map == null || mapUi == null || mapUi.UICanvas == null || !IsSupportedDynamicMarker(source, mapUi))
             return;
 
-        float copySpacing = CampaignMap.mapWidth;
+        float copySpacing = CurrentMapWidth();
         if (copySpacing <= 0f)
             return;
 
@@ -121,8 +127,8 @@ internal static class CampaignMapWrapVisualPatch
             return;
 
         Vector3 sourceWorld = source.WorldPos;
-        SyncDynamicMarkerCopy(copies.Negative, source, mapUi, sourceWorld, -copySpacing, scale);
-        SyncDynamicMarkerCopy(copies.Positive, source, mapUi, sourceWorld, copySpacing, scale);
+        SyncDynamicMarkerCopy(copies.Negative, source, mapUi, sourceWorld, -1, -copySpacing, scale);
+        SyncDynamicMarkerCopy(copies.Positive, source, mapUi, sourceWorld, 1, copySpacing, scale);
     }
 
     internal static void NormalizeWrappedMapClick(ref Vector3 position)
@@ -152,7 +158,7 @@ internal static class CampaignMapWrapVisualPatch
         if (!ModSettings.CampaignMapWraparoundEnabled || source == null || source.Pointer == IntPtr.Zero)
             return;
 
-        float copySpacing = CampaignMap.mapWidth;
+        float copySpacing = CurrentMapWidth();
         if (copySpacing <= 0f)
             return;
 
@@ -160,8 +166,8 @@ internal static class CampaignMapWrapVisualPatch
         if (copies == null)
             return;
 
-        SyncRouteCopy(source, copies.Negative, -copySpacing);
-        SyncRouteCopy(source, copies.Positive, copySpacing);
+        SyncRouteCopy(source, copies.Negative, -1, -copySpacing);
+        SyncRouteCopy(source, copies.Positive, 1, copySpacing);
     }
 
     internal static void PrepareMoveWindowShowMapToMap(CampaignController.TaskForce group, Vector3 from, ref Vector3 to, PathResult result)
@@ -228,16 +234,18 @@ internal static class CampaignMapWrapVisualPatch
         }
 
         SetHorizontalBorderRenderers(mapObject.transform.parent, false);
-        CreateMapCopy(mapRenderer, mapObject, mapMesh, mapTexture, -copySpacing, "NegativeX");
-        CreateMapCopy(mapRenderer, mapObject, mapMesh, mapTexture, copySpacing, "PositiveX");
-        CreateNativeGridCopies(map, copySpacing);
-        CreateStaticVisualLayerCopies(map, copySpacing);
+        CreateMapCopy(mapRenderer, mapObject, mapMesh, mapTexture, -1, "NegativeX");
+        CreateMapCopy(mapRenderer, mapObject, mapMesh, mapTexture, 1, "PositiveX");
+        CreateNativeGridCopies(map);
+        CreateStaticVisualLayerCopies(map);
+        RefreshVisibleSideMaps(Cam.Instance);
 
-        Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP map wrap: enabled visual copies at +/-{copySpacing:0.###} world x-units.");
+        Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP map wrap: enabled seamless visual rotation at +/-{copySpacing:0.###} world x-units.");
     }
 
-    private static void CreateMapCopy(Renderer sourceRenderer, GameObject sourceObject, Mesh sourceMesh, Texture sourceTexture, float xOffset, string sideName)
+    private static void CreateMapCopy(Renderer sourceRenderer, GameObject sourceObject, Mesh sourceMesh, Texture sourceTexture, int lap, string sideName)
     {
+        float xOffset = CurrentMapWidth() * lap;
         GameObject copy = new($"UADVP_WrapMap_{sideName}");
         copy.layer = sourceObject.layer;
         copy.tag = sourceObject.tag;
@@ -261,7 +269,7 @@ internal static class CampaignMapWrapVisualPatch
 
         AddMapRaycastCollider(copy, sourceMesh);
 
-        WrapObjects.Add(copy);
+        RegisterStaticWrapObject(copy, lap);
     }
 
     private static void AddMapRaycastCollider(GameObject copy, Mesh sourceMesh)
@@ -305,7 +313,7 @@ internal static class CampaignMapWrapVisualPatch
         return material;
     }
 
-    private static void CreateNativeGridCopies(CampaignMap map, float copySpacing)
+    private static void CreateNativeGridCopies(CampaignMap map)
     {
         Transform? grid = map.transform.root.Find("WorldEx/MapVisualGrid");
         if (grid == null)
@@ -314,19 +322,19 @@ internal static class CampaignMapWrapVisualPatch
             return;
         }
 
-        CreateOffsetClone(grid.gameObject, -copySpacing, "UADVP_WrapNativeGrid_NegativeX", 0f, null);
-        CreateOffsetClone(grid.gameObject, copySpacing, "UADVP_WrapNativeGrid_PositiveX", 0f, null);
+        CreateOffsetClone(grid.gameObject, -1, "UADVP_WrapNativeGrid_NegativeX", 0f, null);
+        CreateOffsetClone(grid.gameObject, 1, "UADVP_WrapNativeGrid_PositiveX", 0f, null);
     }
 
-    private static void CreateStaticVisualLayerCopies(CampaignMap map, float copySpacing)
+    private static void CreateStaticVisualLayerCopies(CampaignMap map)
     {
         // MapVisualGrid is cloned separately at its native render queue. The
         // label roots are raised over the copied map and country overlays.
-        CreateStaticVisualLayerCopies(map.LabelsAreaRoot, copySpacing, "AreaLabels");
-        CreateStaticVisualLayerCopies(map.LabelsProvincesRoot, copySpacing, "ProvinceLabels");
+        CreateStaticVisualLayerCopies(map.LabelsAreaRoot, "AreaLabels");
+        CreateStaticVisualLayerCopies(map.LabelsProvincesRoot, "ProvinceLabels");
     }
 
-    private static void CreateStaticVisualLayerCopies(Transform? sourceRoot, float copySpacing, string layerName)
+    private static void CreateStaticVisualLayerCopies(Transform? sourceRoot, string layerName)
     {
         if (sourceRoot == null)
         {
@@ -334,12 +342,13 @@ internal static class CampaignMapWrapVisualPatch
             return;
         }
 
-        CreateOffsetClone(sourceRoot.gameObject, -copySpacing, $"UADVP_WrapStatic_NegativeX_{layerName}", LabelLift, LabelRenderQueue);
-        CreateOffsetClone(sourceRoot.gameObject, copySpacing, $"UADVP_WrapStatic_PositiveX_{layerName}", LabelLift, LabelRenderQueue);
+        CreateOffsetClone(sourceRoot.gameObject, -1, $"UADVP_WrapStatic_NegativeX_{layerName}", LabelLift, LabelRenderQueue);
+        CreateOffsetClone(sourceRoot.gameObject, 1, $"UADVP_WrapStatic_PositiveX_{layerName}", LabelLift, LabelRenderQueue);
     }
 
-    private static GameObject CreateOffsetClone(GameObject source, float xOffset, string name, float yLift, int? renderQueue)
+    private static GameObject CreateOffsetClone(GameObject source, int lap, string name, float yLift, int? renderQueue)
     {
+        float xOffset = CurrentMapWidth() * lap;
         GameObject copy = UnityEngine.Object.Instantiate(source, source.transform.parent);
         copy.name = name;
         copy.transform.localPosition = source.transform.localPosition;
@@ -357,8 +366,105 @@ internal static class CampaignMapWrapVisualPatch
         DisableNonRenderingBehaviours(copy);
         DisableColliders(copy);
 
-        WrapObjects.Add(copy);
+        RegisterStaticWrapObject(copy, lap);
         return copy;
+    }
+
+    private static void RegisterStaticWrapObject(GameObject copy, int lap)
+    {
+        WrapObjects.Add(copy);
+        if (!StaticLapObjects.TryGetValue(lap, out List<GameObject>? objects))
+        {
+            objects = new List<GameObject>();
+            StaticLapObjects[lap] = objects;
+        }
+
+        objects.Add(copy);
+        copy.SetActive(IsVisualLapActive(lap));
+    }
+
+    internal static void RefreshVisibleSideMaps(Cam? cam)
+    {
+        bool leftVisible = false;
+        bool rightVisible = false;
+
+        try
+        {
+            CampaignMap? map = CampaignMap.Instance;
+            Renderer? renderer = map?.MapRenderer;
+            Camera? camera = cam?.cameraComp;
+            if (renderer != null && camera != null)
+            {
+                float viewHalfHeight = camera.orthographicSize;
+                float viewHalfWidth = viewHalfHeight * cam!.screenSizeRation;
+                float viewMinX = cam.transform.position.x - viewHalfWidth;
+                float viewMaxX = cam.transform.position.x + viewHalfWidth;
+                leftVisible = viewMinX <= renderer.bounds.min.x + VisibleSideMapPadding;
+                rightVisible = viewMaxX >= renderer.bounds.max.x - VisibleSideMapPadding;
+            }
+        }
+        catch (Exception ex)
+        {
+            Melon<UADVanillaPlusMod>.Logger.Warning($"UADVP map wrap side-map visibility failed. {ex.GetType().Name}: {ex.Message}");
+        }
+
+        SetVisibleSideMaps(leftVisible, rightVisible);
+    }
+
+    private static void SetVisibleSideMaps(bool leftVisible, bool rightVisible)
+    {
+        if (leftVisible == LeftLapVisible && rightVisible == RightLapVisible)
+            return;
+
+        LeftLapVisible = leftVisible;
+        RightLapVisible = rightVisible;
+        SetStaticLapActive(-1, leftVisible);
+        SetStaticLapActive(1, rightVisible);
+        SetDynamicLapActive(-1, leftVisible);
+        SetDynamicLapActive(1, rightVisible);
+    }
+
+    private static bool IsVisualLapActive(int lap)
+        => lap == 0 || (lap < 0 && LeftLapVisible) || (lap > 0 && RightLapVisible);
+
+    internal static float CurrentMapWidth()
+    {
+        if (CampaignMap.mapWidth > 0f)
+            return CampaignMap.mapWidth;
+
+        return CampaignMap.Instance?.MapRenderer?.bounds.size.x ?? 0f;
+    }
+
+    private static void SetStaticLapActive(int lap, bool active)
+    {
+        if (!StaticLapObjects.TryGetValue(lap, out List<GameObject>? objects))
+            return;
+
+        foreach (GameObject obj in objects)
+        {
+            if (obj != null)
+                obj.SetActive(active);
+        }
+    }
+
+    private static void SetDynamicLapActive(int lap, bool active)
+    {
+        if (active)
+            return;
+
+        foreach (DynamicMarkerCopySet copies in DynamicMarkerCopies.Values)
+        {
+            GameObject? copy = lap < 0 ? copies.Negative : copies.Positive;
+            if (copy != null)
+                copy.SetActive(false);
+        }
+
+        foreach (RouteCopySet copies in RouteCopies.Values)
+        {
+            Route? copy = lap < 0 ? copies.Negative : copies.Positive;
+            if (copy != null)
+                copy.gameObject.SetActive(false);
+        }
     }
 
     private static DynamicMarkerCopySet? GetOrCreateDynamicMarkerCopies(CampaignMapElement source)
@@ -375,9 +481,13 @@ internal static class CampaignMapWrapVisualPatch
         if (existing != null)
             DestroyDynamicMarkerCopySet(existing);
 
+        float copySpacing = CurrentMapWidth();
+        if (copySpacing <= 0f)
+            return null;
+
         DynamicMarkerKind kind = DynamicMarkerKindFor(source);
-        GameObject? negative = CreateDynamicMarkerCopy(source, "NegativeX", kind, -CampaignMap.mapWidth);
-        GameObject? positive = CreateDynamicMarkerCopy(source, "PositiveX", kind, CampaignMap.mapWidth);
+        GameObject? negative = CreateDynamicMarkerCopy(source, "NegativeX", kind, -copySpacing);
+        GameObject? positive = CreateDynamicMarkerCopy(source, "PositiveX", kind, copySpacing);
         if (negative == null || positive == null)
         {
             if (negative != null)
@@ -422,10 +532,16 @@ internal static class CampaignMapWrapVisualPatch
         return copy;
     }
 
-    private static void SyncDynamicMarkerCopy(GameObject copy, CampaignMapElement source, MapUI mapUi, Vector3 sourceWorld, float xOffset, float scale)
+    private static void SyncDynamicMarkerCopy(GameObject copy, CampaignMapElement source, MapUI mapUi, Vector3 sourceWorld, int lap, float xOffset, float scale)
     {
         if (copy == null || source == null)
             return;
+
+        if (!IsVisualLapActive(lap) || !source.gameObject.activeSelf)
+        {
+            copy.SetActive(false);
+            return;
+        }
 
         Vector3 wrappedWorld = sourceWorld;
         wrappedWorld.x += xOffset;
@@ -504,7 +620,7 @@ internal static class CampaignMapWrapVisualPatch
     {
         CampaignMap? map = CampaignMap.Instance;
         Renderer? renderer = map?.MapRenderer;
-        float width = CampaignMap.mapWidth > 0f ? CampaignMap.mapWidth : renderer?.bounds.size.x ?? 0f;
+        float width = CurrentMapWidth();
         if (renderer == null || width <= 0f)
             return position;
 
@@ -535,7 +651,7 @@ internal static class CampaignMapWrapVisualPatch
 
     private static Vector3 ChooseNearestSelectedCopyDestination(Vector3 normalizedPosition)
     {
-        float mapWidth = CampaignMap.mapWidth;
+        float mapWidth = CurrentMapWidth();
         if (mapWidth <= 0f)
             return normalizedPosition;
 
@@ -653,7 +769,7 @@ internal static class CampaignMapWrapVisualPatch
             $"raw={FormatVector(rawPosition)}, normalized={FormatVector(normalizedPosition)}, desired={FormatVector(desiredPosition)}, " +
             $"effective={FormatVector(effectivePosition)}, proxy={LastMapClickUsedRoutingProxy}, " +
             $"selectionOffset={LastMapClickSelectionOffset:0.###}, selectionVisual={FormatVector(LastMapClickSelectionVisualPosition)}, " +
-            $"xDelta={(rawPosition.x - normalizedPosition.x):0.###}, mapWidth={CampaignMap.mapWidth:0.###}, boundsX={boundsText}.");
+            $"xDelta={(rawPosition.x - normalizedPosition.x):0.###}, mapWidth={CurrentMapWidth():0.###}, boundsX={boundsText}.");
     }
 
     private static bool ShouldLogMovementDiagnostic()
@@ -1058,7 +1174,7 @@ internal static class CampaignMapWrapVisualPatch
         if (RouteCopies.Count == 0)
             return;
 
-        float copySpacing = CampaignMap.mapWidth;
+        float copySpacing = CurrentMapWidth();
         if (copySpacing <= 0f)
             return;
 
@@ -1067,17 +1183,23 @@ internal static class CampaignMapWrapVisualPatch
             if (copies.Source == null || copies.Negative == null || copies.Positive == null)
                 continue;
 
-            SyncRouteCopy(copies.Source, copies.Negative, -copySpacing);
-            SyncRouteCopy(copies.Source, copies.Positive, copySpacing);
+            SyncRouteCopy(copies.Source, copies.Negative, -1, -copySpacing);
+            SyncRouteCopy(copies.Source, copies.Positive, 1, copySpacing);
         }
     }
 
-    private static void SyncRouteCopy(Route source, Route copy, float xOffset)
+    private static void SyncRouteCopy(Route source, Route copy, int lap, float xOffset)
     {
         if (source == null || copy == null)
             return;
 
-        copy.gameObject.SetActive(source.gameObject.activeSelf);
+        if (!IsVisualLapActive(lap) || !source.gameObject.activeSelf)
+        {
+            copy.gameObject.SetActive(false);
+            return;
+        }
+
+        copy.gameObject.SetActive(true);
         copy.transform.localRotation = source.transform.localRotation;
         copy.transform.localScale = source.transform.localScale;
 
@@ -1264,7 +1386,8 @@ internal static class CampaignMapWrapVisualPatch
             return;
 
         CreatedCountryOverlayCopies = true;
-        int createdCopies = CreateCountryOverlayCopies(map, CampaignMap.mapWidth);
+        int createdCopies = CreateCountryOverlayCopies(map);
+        RefreshVisibleSideMaps(Cam.Instance);
         Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP map wrap: copied {createdCopies} country overlay renderers.");
     }
 
@@ -1298,7 +1421,7 @@ internal static class CampaignMapWrapVisualPatch
         return false;
     }
 
-    private static int CreateCountryOverlayCopies(CampaignMap map, float copySpacing)
+    private static int CreateCountryOverlayCopies(CampaignMap map)
     {
         CampaignBordersManager? bordersManager = map.bordersManager;
         if (bordersManager == null || bordersManager.Countries == null)
@@ -1316,9 +1439,9 @@ internal static class CampaignMapWrapVisualPatch
                 if (sourceRenderer == null)
                     continue;
 
-                if (CreateCountryOverlayCopy(sourceRenderer, -copySpacing, "NegativeX", country.Name, i))
+                if (CreateCountryOverlayCopy(sourceRenderer, -1, "NegativeX", country.Name, i))
                     createdCopies++;
-                if (CreateCountryOverlayCopy(sourceRenderer, copySpacing, "PositiveX", country.Name, i))
+                if (CreateCountryOverlayCopy(sourceRenderer, 1, "PositiveX", country.Name, i))
                     createdCopies++;
             }
         }
@@ -1326,8 +1449,9 @@ internal static class CampaignMapWrapVisualPatch
         return createdCopies;
     }
 
-    private static bool CreateCountryOverlayCopy(MeshRenderer sourceRenderer, float xOffset, string sideName, string countryName, int regionIndex)
+    private static bool CreateCountryOverlayCopy(MeshRenderer sourceRenderer, int lap, string sideName, string countryName, int regionIndex)
     {
+        float xOffset = CurrentMapWidth() * lap;
         GameObject source = sourceRenderer.gameObject;
         MeshFilter? sourceFilter = source.GetComponent<MeshFilter>();
         if (sourceFilter == null || sourceFilter.sharedMesh == null)
@@ -1357,7 +1481,7 @@ internal static class CampaignMapWrapVisualPatch
         copyRenderer.sortingOrder = sourceRenderer.sortingOrder;
         copyRenderer.sharedMaterials = CloneMaterials(sourceRenderer.materials, copy.name, CountryOverlayRenderQueue);
 
-        WrapObjects.Add(copy);
+        RegisterStaticWrapObject(copy, lap);
         return true;
     }
 
@@ -1493,11 +1617,14 @@ internal static class CampaignMapWrapVisualPatch
         }
 
         WrapObjects.Clear();
+        StaticLapObjects.Clear();
         DynamicMarkerCopies.Clear();
         RouteCopies.Clear();
         CreatedCountryOverlayCopies = false;
         LoggedDynamicMarkerCopies = false;
         LoggedRouteCopies = false;
+        LeftLapVisible = false;
+        RightLapVisible = false;
         LastOverlayAttemptFrame = 0;
         LastDynamicCleanupFrame = 0;
     }
@@ -1647,21 +1774,24 @@ internal static class CampaignMapWrapCameraBoundsPatch
         if (!GameManager.IsWorldMap || CampaignMap.Instance == null || __instance?.cameraComp == null || !ModSettings.CampaignMapWraparoundEnabled)
             return true;
 
-        float mapWidth = CampaignMap.mapWidth;
+        float mapWidth = CampaignMapWrapVisualPatch.CurrentMapWidth();
         if (mapWidth <= 0f)
             return true;
 
         float viewHalfHeight = __instance.cameraComp.orthographicSize;
         float viewHalfWidth = viewHalfHeight * __instance.screenSizeRation;
 
-        __instance.rightBorder = CampaignMap.MapSize.x - viewHalfWidth + 1f + mapWidth;
-        __instance.leftBorder = viewHalfWidth - CampaignMap.MapSize.x - 1f - mapWidth;
+        __instance.rightBorder = CampaignMap.MapSize.x - viewHalfWidth + 1f;
+        __instance.leftBorder = viewHalfWidth - CampaignMap.MapSize.x - 1f;
         __instance.topBorder = CampaignMap.MapSize.z - viewHalfHeight + 1f;
         __instance.bottomBorder = viewHalfHeight - CampaignMap.MapSize.z - 1f;
 
         Transform transform = __instance.transform;
         Vector3 position = transform.position;
-        position.x = Mathf.Clamp(position.x, __instance.leftBorder, __instance.rightBorder);
+        while (position.x > __instance.rightBorder)
+            position.x -= mapWidth;
+        while (position.x < __instance.leftBorder)
+            position.x += mapWidth;
         position.z = Mathf.Clamp(position.z, __instance.bottomBorder, __instance.topBorder);
         transform.position = position;
 

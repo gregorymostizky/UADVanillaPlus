@@ -6,7 +6,7 @@
 - Option values: `Disc World` enables the experimental wrap illusion; `Flat Earth` keeps vanilla map geometry.
 - Menu location: UAD:VP options -> `Experimental`.
 - Default state: off.
-- Current version after expanding wrapped dynamic markers: `0.2.0`.
+- Current version after adding seamless camera rotation: `0.2.1`.
 - Current source files:
   - `UADVanillaPlus/Harmony/CampaignMapWrapVisualPatch.cs`
   - `UADVanillaPlus/GameData/ModSettings.cs`
@@ -53,6 +53,10 @@
   - Wrapped dynamic marker copies now include `EventUI` mission/event markers under `MapUI.EventsRoot`.
   - Wrapped marker copies mirror graphic, text, and line-renderer state from the authoritative marker so enemy task forces, mission icons, and other marker state changes remain visually current.
   - Wrapped event/mission marker copies proxy click, hover, and leave handling to the original marker button.
+- `0.2.1` changes the camera model from a fixed three-map strip to seamless rotation:
+  - Horizontal camera bounds are canonical again; when the camera crosses a Pacific edge it is shifted by one map width to the opposite edge.
+  - Left/right map, grid, label, country-overlay, marker, and route copies stay pooled but only activate when that side of the map is visible.
+  - The original map remains the authoritative vanilla map; side copies are visual/raycast proxies for whichever seam is currently in view.
 - Native `MapVisualGrid` cloning is the correct grid path. Earlier procedural grid attempts rendered on top of the map and changed ocean color.
 - Country overlays must be created after the game swaps neutral materials for live `player-*` materials. Creating them immediately after `CampaignMap.PostInit` produces grey masks.
 - The toggle is intended to work live:
@@ -62,7 +66,7 @@
 ## Important Implementation Notes
 
 - `CampaignMapWrapVisualPatch` is visual-only for now. It does not make the world truly cylindrical.
-- The working approach is an illusion: keep the original map, then stitch visual copies to the left and right.
+- The working approach is an illusion: keep the original map authoritative, show pooled side copies only near the visible seam, and rotate the camera by one map width when it crosses an edge.
 - The base map copies use the original map mesh and texture with an unlit/sprite-compatible material at a high render queue.
 - The base map copies also receive a `MeshCollider` using the same mesh, layer, and tag as the vanilla map surface, so `CampaignMap.DetectClick()` can hit them.
 - Native side borders are hidden while wrap is enabled and restored when disabled.
@@ -83,7 +87,7 @@
 - Port, task-force, and `EventUI` mission/event icon markers are wrapped. Battles, minefields, zones, and other live map markers may still use vanilla map behavior.
 - Port/task-force/mission marker clicks and hover are proxied from wrapped copies. Movement destination clicks use visual side-map coordinates on wrapped map surfaces, but non-movement map-surface hit testing may still use vanilla map behavior.
 - Route visuals are mirrored, not regenerated as true cylindrical routes. If vanilla pathfinding chooses a long path, the visual copies will faithfully mirror that long path.
-- Camera panning is expanded, not mathematically wrapped. The camera can view the stitched copies, but coordinates are not normalized across the seam.
+- Camera panning now visually rotates at the Pacific seam, but the underlying campaign state is still vanilla/canonical rather than a truly cylindrical world model.
 - The feature is experimental and off by default because the player-facing illusion is promising but incomplete.
 
 ## Likely Next Steps
@@ -104,8 +108,8 @@
    - Keep clone counts cached and avoid scene scans in hot paths.
 
 4. Improve camera behavior.
-   - Consider soft recentering the camera when it moves beyond one map width, while preserving visual continuity.
-   - This would make the illusion feel more cylindrical instead of just wider.
+   - Verify seam-crossing while dragging, keyboard scrolling, minimap jumps, zoomed-out views, and selected-task-force movement.
+   - Consider smoothing or suppressing any visible snap if the camera shift is noticeable in play.
 
 5. Verify performance.
    - Watch clone counts and retry logic.
@@ -116,4 +120,4 @@
 
 ## Helpful Quote For Context
 
-Do not try to make the world round. That is impossible. Instead, realize the truth: there is no round world. Then you will see it is not the map that wraps. It is only three flat worlds, stitched side by side.
+Do not try to make the world round. That is impossible. Instead, realize the truth: there is no round world. Then you will see it is not the map that wraps. It is one flat world, quietly moved under the camera.
