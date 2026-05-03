@@ -2,7 +2,7 @@
 
 UAD Vanilla Plus (`UAD:VP`) is a lightweight mod for Ultimate Admiral: Dreadnoughts that keeps the base game feel while adding small quality-of-life improvements.
 
-Current version: `0.2.10`
+Current version: `0.2.11`
 
 ## Philosophy
 
@@ -32,45 +32,46 @@ Start the game normally after copying the DLL. If the mod loads, `UAD:VP` and th
 
 **QoL:**
 
-- Campaign maintenance indicators: show dock expansion status and transport capacity directly in the campaign country info panel.
-- Campaign battle auto-resolve odds: show the player's vanilla auto-resolve win chance in the battle popup.
-- Campaign map port ship counts: darken and bold ports with player or AI vessels, lightly mute empty ports, and show counts beside occupied port names on the world map.
-- Campaign active fleet port count: show how many active vessels are currently in port.
-- Campaign construction summaries: split own builds, foreign contracts, and commissioning ships in the existing build counts.
-- Campaign technology indicator: show a compact estimate for the next expected research discovery.
-- Declare War politics action: add a direct Declare War button with confirmation to campaign politics rows.
-- In-game options menu: control UAD:VP balance options from the top-right game UI.
+- <u>Campaign maintenance indicators</u>: show dock expansion status and transport capacity directly in the campaign country info panel.
+- <u>Task force return shortcut</u>: add a `Return to <origin port>` button to task-force popups for one-click orders back to port.
+- <u>Campaign battle auto-resolve odds</u>: show the player's vanilla auto-resolve win chance in the battle popup.
+- <u>Campaign map port ship counts</u>: darken and bold ports with player or AI vessels, lightly mute empty ports, and show counts beside occupied port names on the world map.
+- <u>Campaign active fleet port count</u>: show how many active vessels are currently in port.
+- <u>Campaign construction summaries</u>: split own builds, foreign contracts, and commissioning ships in the existing build counts.
+- <u>Campaign technology indicator</u>: show a compact estimate for the next expected research discovery.
+- <u>Declare War politics action</u>: add a direct Declare War button with confirmation to campaign politics rows.
+- <u>In-game options menu</u>: control UAD:VP balance options from the top-right game UI.
 
 **Balance:**
 
-- Port Strike balance: scales transport losses from undefended port strikes by attacker tonnage instead of allowing small raiders to destroy large transport groups.
-- Suspend Dock Overcapacity: automatically delays lower-priority repairs, builds, and refits when monthly dock work exceeds shipyard capacity; manual mode keeps vanilla overcapacity handling.
+- <u>Port Strike balance</u>: scales transport losses from undefended port strikes by attacker tonnage instead of allowing small raiders to destroy large transport groups.
+- <u>Suspend Dock Overcapacity</u>: automatically delays lower-priority repairs, builds, and refits when monthly dock work exceeds shipyard capacity; manual mode keeps vanilla overcapacity handling.
 
 ### Design
 
 **QoL:**
 
-- Design ship counts: show active, building, and unavailable ships for each design.
-- Designs tab country viewer: browse major AI nations' ship designs from the campaign Designs tab.
+- <u>Design ship counts</u>: show active, building, and unavailable ships for each design.
+- <u>Designs tab country viewer</u>: browse major AI nations' ship designs from the campaign Designs tab.
 
 **Balance:**
 
-- CA+ torpedo restriction: optionally disallow torpedo launchers on heavy cruisers, battlecruisers, and battleships.
+- <u>CA+ torpedo restriction</u>: optionally disallow torpedo launchers on heavy cruisers, battlecruisers, and battleships.
 
 ### Battle
 
 **QoL:**
 
-- Battle speed quality-of-life: keep the player's selected battle speed available when the game tries to slow simulation speed near enemies.
+- <u>Battle speed quality-of-life</u>: keep the player's selected battle speed available when the game tries to slow simulation speed near enemies.
 
 **Balance:**
 
-- Accuracy penalty balance: lets players reduce extreme smoke, stability, and instability accuracy penalties from ship design.
-- Battle weather balance: optionally force daytime fair-weather battles instead of random time and bad-weather rolls.
+- <u>Accuracy penalty balance</u>: lets players reduce extreme smoke, stability, and instability accuracy penalties from ship design.
+- <u>Battle weather balance</u>: optionally force daytime fair-weather battles instead of random time and bad-weather rolls.
 
 ### Experimental
 
-- Map Geometry: optional `Disc World` seamless visual wrap-around for the campaign map at the Pacific edge, including clickable port/task-force/mission marker copies, wrapped task-force route visuals, and wrapped-map movement clicks/destinations. The `Flat Earth` setting keeps vanilla map geometry and remains the default.
+- <u>Map Geometry</u>: optional `Disc World` seamless visual wrap-around for the campaign map at the Pacific edge, including clickable port/task-force/mission marker copies, wrapped task-force route visuals, and wrapped-map movement clicks/destinations. The `Flat Earth` setting keeps vanilla map geometry and remains the default.
 
 ## Known Issues
 
