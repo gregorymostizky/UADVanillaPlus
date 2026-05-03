@@ -2,7 +2,7 @@
 
 UAD Vanilla Plus (`UAD:VP`) is a lightweight mod for Ultimate Admiral: Dreadnoughts that keeps the base game feel while adding small quality-of-life improvements.
 
-Current version: `0.2.2`
+Current version: `0.2.10`
 
 ## Philosophy
 
@@ -34,6 +34,7 @@ Start the game normally after copying the DLL. If the mod loads, `UAD:VP` and th
 
 - Campaign maintenance indicators: show dock expansion status and transport capacity directly in the campaign country info panel.
 - Campaign battle auto-resolve odds: show the player's vanilla auto-resolve win chance in the battle popup.
+- Campaign map port ship counts: darken and bold ports with player or AI vessels, lightly mute empty ports, and show counts beside occupied port names on the world map.
 - Campaign active fleet port count: show how many active vessels are currently in port.
 - Campaign construction summaries: split own builds, foreign contracts, and commissioning ships in the existing build counts.
 - Campaign technology indicator: show a compact estimate for the next expected research discovery.

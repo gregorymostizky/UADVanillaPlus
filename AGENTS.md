@@ -47,6 +47,7 @@ Copy-Item -LiteralPath 'E:\Codex\UADVanillaPlus\UADVanillaPlus\bin\Release\net6.
 - `Harmony/CampaignConstructionStatusPatch.cs`: campaign construction summary/count display plus campaign maintenance indicators only.
 - `Harmony/CampaignCountryInfoFinalRefreshPatch.cs`: final-pass campaign country-info decoration after broad vanilla UI refreshes only.
 - `Harmony/CampaignCountryInfoWatchdogPatch.cs`: narrow campaign country-info repair pass for vanilla tab/popup rewrites only; keep checks cheap and scoped to visible country-info instances.
+- `Harmony/CampaignPortShipCountPatch.cs`: campaign world-map port-name active vessel counts only.
 - `Harmony/CampaignActiveFleetStatusPatch.cs`: campaign Active Fleet in-port count display only.
 - `Harmony/CampaignTechnologyStatusPatch.cs`: campaign country-info technology timing indicator only.
 - `Harmony/InGameOptionsMenuPatch.cs`: top-right UAD:VP in-game options menu only.
