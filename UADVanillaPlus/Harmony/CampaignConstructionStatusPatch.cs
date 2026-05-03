@@ -24,6 +24,8 @@ internal static class CampaignConstructionStatusPatch
     private static readonly HashSet<GameObject> DockTooltipTargets = new();
     private static string lastLoggedSummary = string.Empty;
     private static string lastLoggedMaintenanceSummary = string.Empty;
+    private static string lastLoggedMaintenanceTrace = string.Empty;
+    private static string lastLoggedApplySkip = string.Empty;
 
     [HarmonyPrefix]
     [HarmonyPatch(nameof(CampaignCountryInfoUI.GetVesselsBuildingCount))]
@@ -39,28 +41,49 @@ internal static class CampaignConstructionStatusPatch
     [HarmonyPostfix]
     [HarmonyPatch(nameof(CampaignCountryInfoUI.Refresh))]
     internal static void RefreshPostfix(CampaignCountryInfoUI __instance)
+        => ApplyToInstance(__instance);
+
+    internal static void ApplyToInstance(CampaignCountryInfoUI __instance)
     {
         Stopwatch stopwatch = Stopwatch.StartNew();
 
         try
         {
             Player? player = PlayerController.Instance;
-            if (__instance?.BuildingList == null || player == null || !TryBuildCounts(player, out ConstructionCounts counts))
+            if (__instance == null || player == null)
                 return;
 
-            if (__instance.BuildingLabel != null)
-                __instance.BuildingLabel.text = $"Building {counts.TotalDisplay} ships:";
-
-            __instance.BuildingList.text = counts.TypeDisplay;
-            EnsureConstructionTooltip(__instance);
+            // Dock and transport status come from player-level campaign data and
+            // can be ready before vanilla has finished populating the build list
+            // during campaign load. Keep it independent so the maintenance line
+            // appears on first load instead of waiting for a later tab refresh.
             UpdateMaintenanceStatus(__instance, player, stopwatch);
 
-            string summary = $"{counts.TotalDisplay}|{counts.TypeDisplay}";
-            if (summary != lastLoggedSummary)
+            if (__instance.BuildingList == null)
             {
-                lastLoggedSummary = summary;
-                Melon<UADVanillaPlusMod>.Logger.Msg(
-                    $"UADVP campaign construction: displayed {counts.TotalDisplay} ships as {counts.TypeDisplay} in {stopwatch.ElapsedMilliseconds} ms.");
+                LogApplySkipOnce("building-list-missing");
+                return;
+            }
+
+            if (TryBuildCounts(player, out ConstructionCounts counts))
+            {
+                if (__instance.BuildingLabel != null)
+                    __instance.BuildingLabel.text = $"Building {counts.TotalDisplay} ships:";
+
+                __instance.BuildingList.text = counts.TypeDisplay;
+                EnsureConstructionTooltip(__instance);
+
+                string summary = $"{counts.TotalDisplay}|{counts.TypeDisplay}";
+                if (summary != lastLoggedSummary)
+                {
+                    lastLoggedSummary = summary;
+                    Melon<UADVanillaPlusMod>.Logger.Msg(
+                        $"UADVP campaign construction: displayed {counts.TotalDisplay} ships as {counts.TypeDisplay} in {stopwatch.ElapsedMilliseconds} ms.");
+                }
+            }
+            else
+            {
+                LogApplySkipOnce("build-counts-unavailable");
             }
         }
         catch (Exception ex)
@@ -125,6 +148,15 @@ internal static class CampaignConstructionStatusPatch
         }
     }
 
+    private static void LogApplySkipOnce(string reason)
+    {
+        if (reason == lastLoggedApplySkip)
+            return;
+
+        lastLoggedApplySkip = reason;
+        Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP campaign construction partial apply: {reason}; maintenance status was still attempted.");
+    }
+
     private static void UpdateMaintenanceStatus(CampaignCountryInfoUI ui, Player player, Stopwatch stopwatch)
     {
         if (ui.ShipyardSize == null || player == null)
@@ -132,8 +164,14 @@ internal static class CampaignConstructionStatusPatch
 
         DockyardStatus status = BuildDockyardStatus(player);
         TransportCapacityStatus transport = BuildTransportCapacityStatus(player);
+        string beforeText = ui.ShipyardSize.text ?? string.Empty;
+        string strippedText = StripMaintenanceLine(beforeText);
+        string maintenanceLine = $"{status.Display} | {transport.Display}";
+        string nextText = string.IsNullOrWhiteSpace(strippedText)
+            ? maintenanceLine
+            : $"{strippedText}\n{maintenanceLine}";
 
-        ui.ShipyardSize.text = $"{ui.ShipyardSize.text}\n{status.Display} | {transport.Display}";
+        ui.ShipyardSize.text = nextText;
         EnsureDockyardTooltip(ui);
 
         string summary = $"{status.LogSummary}; {transport.LogSummary}";
@@ -143,6 +181,65 @@ internal static class CampaignConstructionStatusPatch
             Melon<UADVanillaPlusMod>.Logger.Msg(
                 $"UADVP campaign maintenance status: displayed {summary} in {stopwatch.ElapsedMilliseconds} ms.");
         }
+
+        LogMaintenanceTrace(ui, beforeText, strippedText, nextText, summary);
+    }
+
+    internal static string DebugMaintenanceText(CampaignCountryInfoUI? ui)
+    {
+        if (ui?.ShipyardSize == null)
+            return "<missing ShipyardSize>";
+
+        return CompactText(ui.ShipyardSize.text);
+    }
+
+    internal static bool HasMaintenanceMarkers(CampaignCountryInfoUI? ui)
+        => ui?.ShipyardSize != null &&
+           HasMarker(ui.ShipyardSize.text, "Dock ") &&
+           HasMarker(ui.ShipyardSize.text, ">TR ");
+
+    private static void LogMaintenanceTrace(
+        CampaignCountryInfoUI ui,
+        string beforeText,
+        string strippedText,
+        string nextText,
+        string summary)
+    {
+        bool beforeHadMarkers = HasMarker(beforeText, "Dock ") && HasMarker(beforeText, ">TR ");
+        bool afterHasMarkers = HasMarker(nextText, "Dock ") && HasMarker(nextText, ">TR ");
+        string trace = $"{ui.gameObject.name}|active={ui.gameObject.activeInHierarchy}|before={beforeHadMarkers}|after={afterHasMarkers}|base='{CompactText(strippedText)}'|next='{CompactText(nextText)}'|{summary}";
+        if (trace == lastLoggedMaintenanceTrace)
+            return;
+
+        lastLoggedMaintenanceTrace = trace;
+        Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP campaign maintenance trace: {trace}.");
+    }
+
+    private static bool HasMarker(string? text, string marker)
+        => !string.IsNullOrEmpty(text) && text.Contains(marker, StringComparison.Ordinal);
+
+    private static string CompactText(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return string.Empty;
+
+        string compact = text.Replace("\r", string.Empty).Replace("\n", " | ").Trim();
+        return compact.Length <= 180 ? compact : compact[..180] + "...";
+    }
+
+    private static string StripMaintenanceLine(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return string.Empty;
+
+        IEnumerable<string> vanillaLines = text
+            .Split('\n')
+            .Where(static line =>
+                !line.Contains("Dock Idle", StringComparison.Ordinal) &&
+                !line.Contains("Dock Expanding:", StringComparison.Ordinal) &&
+                !line.Contains(">TR ", StringComparison.Ordinal));
+
+        return string.Join("\n", vanillaLines).TrimEnd();
     }
 
     private static DockyardStatus BuildDockyardStatus(Player player)

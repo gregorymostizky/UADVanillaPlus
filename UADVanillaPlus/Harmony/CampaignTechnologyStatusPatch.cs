@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.RegularExpressions;
 using HarmonyLib;
 using Il2Cpp;
 using MelonLoader;
@@ -14,12 +15,16 @@ namespace UADVanillaPlus.Harmony;
 internal static class CampaignTechnologyStatusPatch
 {
     private const float ResearchCompleteProgress = 100f;
+    private static readonly Regex NextDiscoverySuffixRegex = new(@"\s*\(Next \d+m\)\s*$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
     private static readonly HashSet<GameObject> TooltipTargets = new();
     private static string lastLoggedSummary = string.Empty;
 
     [HarmonyPostfix]
     [HarmonyPatch(nameof(CampaignCountryInfoUI.Refresh))]
     internal static void RefreshPostfix(CampaignCountryInfoUI __instance)
+        => ApplyToInstance(__instance);
+
+    internal static void ApplyToInstance(CampaignCountryInfoUI __instance)
     {
         Stopwatch stopwatch = Stopwatch.StartNew();
 
@@ -32,7 +37,7 @@ internal static class CampaignTechnologyStatusPatch
             if (!TryGetNextDiscovery(player, out DiscoveryEstimate estimate))
                 return;
 
-            __instance.Technology.text = $"{__instance.Technology.text} (Next {estimate.Months}m)";
+            __instance.Technology.text = $"{StripNextDiscoverySuffix(__instance.Technology.text)} (Next {estimate.Months}m)";
             EnsureTooltip(__instance.Technology.gameObject);
 
             string summary = $"{estimate.Months}m:{estimate.Name}";
@@ -49,6 +54,9 @@ internal static class CampaignTechnologyStatusPatch
                 $"UADVP campaign technology status patch failed; leaving vanilla text intact. {ex.GetType().Name}: {ex.Message}");
         }
     }
+
+    private static string StripNextDiscoverySuffix(string text)
+        => string.IsNullOrWhiteSpace(text) ? string.Empty : NextDiscoverySuffixRegex.Replace(text, string.Empty);
 
     private static bool TryGetNextDiscovery(Player player, out DiscoveryEstimate estimate)
     {

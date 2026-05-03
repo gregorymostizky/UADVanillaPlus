@@ -2,7 +2,7 @@
 
 UAD Vanilla Plus (`UAD:VP`) is a lightweight mod for Ultimate Admiral: Dreadnoughts that keeps the base game feel while adding small quality-of-life improvements.
 
-Current version: `0.1.45`
+Current version: `0.1.52`
 
 ## Philosophy
 
@@ -64,6 +64,10 @@ Start the game normally after copying the DLL. If the mod loads, `UAD:VP` and th
 
 - Accuracy penalty balance: lets players reduce extreme smoke, stability, and instability accuracy penalties from ship design.
 - Battle weather balance: optionally force daytime fair-weather battles instead of random time and bad-weather rolls.
+
+## Known Issues
+
+- Campaign maintenance indicators may not appear immediately on initial campaign load. They are restored after switching campaign tabs.
 
 ## Building And Running From Source
 
