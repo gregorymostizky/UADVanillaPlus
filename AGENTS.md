@@ -2,6 +2,7 @@
 
 ## Working Rules
 
+- Before continuing an existing multi-session investigation, check `plans/` for handoff notes. In particular, campaign map wrap-around follow-up work should start with `plans/campaign-map-wrap.md`.
 - Bump `UADVanillaPlus/ModInfo.cs` `MelonVersion` for every user-visible code or behavior change.
 - Keep the in-game overlay version and MelonLoader metadata consistent through `ModInfo.DisplayText`.
 - After a successful build, always try the built-DLL copy immediately. Copy directly to the game `Mods` folder without first checking whether the game is running; if the DLL is locked, let the copy fail and report that.
@@ -16,6 +17,7 @@
 - Order README feature bullets by user value/impact within each subsection, not by implementation chronology. Use judgment: frequently checked, high-friction, or high-consequence gameplay improvements should appear before smaller conveniences.
 - Never commit or push to `master` unless the user asks for a commit, push, merge, or GitHub update. Once they do, `master` is the default target in this repo.
 - For development work, truth-seek against the available game disassembly before guessing how UAD works. The workspace has both skeleton/diffable and fuller IL views available at `E:\Codex\cpp2il_uad_diffable` and `E:\Codex\cpp2il_uad_isil`; inspect the relevant game classes/methods there when behavior or signatures are uncertain.
+- Before adding Harmony diagnostics to Il2Cpp methods with unusual signatures, verify the exact decompiled signature and likely marshaling behavior up front. Be especially careful around `ref`/`out` parameters, value-type structs, Il2Cpp collection fields, nested generic types, and UI hot paths; prefer safer surrounding hooks or read-only postfixes when the direct hook shape is uncertain.
 - Be performance-conscious by default. One of VP's goals is to avoid TAF/DIP-style overhead, so watch for hot paths, broad polling, expensive UI rebuilds, repeated reflection, allocations in frequent hooks, and large data scans. Push back when a requested idea is likely to hurt performance, and prefer designs that cache, narrow scope, or hook less frequently.
 - Be liberal with temporary logs and timings when debugging. UAD behavior is often unclear from source alone and reruns are expensive, so optimize for enough upfront evidence to diagnose from `Latest.log`. Keep debug output clearly prefixed/scoped so it can be removed or gated later.
 - When a player-visible rough edge is accepted as "good enough for now", document it in `README.md` under Known Issues so future sessions do not rediscover it from scratch.
@@ -39,6 +41,7 @@ Copy-Item -LiteralPath 'E:\Codex\UADVanillaPlus\UADVanillaPlus\bin\Release\net6.
 
 ## Current Feature Layout
 
+- `plans/`: cross-session implementation notes and next-step plans. Read the relevant file before resuming a planned feature.
 - `Harmony/UiVersionTextPatch.cs`: version text overlay only.
 - `Harmony/CampaignFleetWindowDesignViewerPatch.cs`: Designs tab country viewer and design ship-count display only.
 - `Harmony/CampaignConstructionStatusPatch.cs`: campaign construction summary/count display plus campaign maintenance indicators only.
@@ -48,6 +51,7 @@ Copy-Item -LiteralPath 'E:\Codex\UADVanillaPlus\UADVanillaPlus\bin\Release\net6.
 - `Harmony/CampaignTechnologyStatusPatch.cs`: campaign country-info technology timing indicator only.
 - `Harmony/InGameOptionsMenuPatch.cs`: top-right UAD:VP in-game options menu only.
 - `Harmony/CampaignPoliticsDeclareWarPatch.cs`: politics row Declare War button only.
+- `Harmony/CampaignMapWrapVisualPatch.cs`: experimental campaign map visual wrap-around only; off by default from the UAD:VP Experimental options section.
 - `Harmony/BattleTimeSpeedLimitPatch.cs`: battle simulation speed limit QoL only.
 - `Harmony/BattleWeatherBalancePatch.cs`: battle weather/daytime balance option only.
 - `Harmony/BattleAccuracyPenaltyBalancePatch.cs` and `GameData/AccuracyPenaltyBalance.cs`: battle design-side accuracy penalty balance option only; rewrites selected `StatData.effect` strings before vanilla `PostProcess` parses them, avoiding combat-time overhead and loaded-dictionary mutation.

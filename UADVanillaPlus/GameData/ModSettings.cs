@@ -105,7 +105,7 @@ internal static class ModSettings
             campaignMapWraparoundEnabled = value;
             PlayerPrefs.SetInt(CampaignMapWraparoundEnabledKey, value ? 1 : 0);
             PlayerPrefs.Save();
-            Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP option: Campaign Map Wrap {(value ? "Enabled" : "Off")}.");
+            Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP option: Map Geometry {(value ? "Disc World" : "Flat Earth")}.");
         }
     }
 
