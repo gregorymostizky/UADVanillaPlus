@@ -6,7 +6,7 @@
 - Option values: `Disc World` enables the experimental wrap illusion; `Flat Earth` keeps vanilla map geometry.
 - Menu location: UAD:VP options -> `Experimental`.
 - Default state: off.
-- Current version after consolidating temporary diagnostics for merge: `0.1.106`.
+- Current version after expanding wrapped dynamic markers: `0.2.0`.
 - Current source files:
   - `UADVanillaPlus/Harmony/CampaignMapWrapVisualPatch.cs`
   - `UADVanillaPlus/GameData/ModSettings.cs`
@@ -18,8 +18,8 @@
 - Horizontal camera bounds can expand by one map width on either side when the option is enabled.
 - The Pacific edge can be shown as a wrap illusion by rendering neighbor copies of the campaign map surface at `+/- CampaignMap.mapWidth`.
 - The wrapped side maps now render with the correct base texture, native grid, area/province labels, and political country overlays.
-- Port and task-force UI marker copies are synced to the side maps from vanilla `CampaignMapElement.UpdatePositionScale` calls.
-- Wrapped port and task-force marker copies can proxy clicks and hover handling to the original marker/button.
+- Port, task-force, and event/mission UI marker copies are synced to the side maps from vanilla `CampaignMapElement.UpdatePositionScale` calls.
+- Wrapped port, task-force, and event/mission marker copies can proxy clicks and hover handling to the original marker/button.
 - Wrapped-map movement clicks now keep the visual side-map coordinate instead of forcing the destination back into the original map bounds. This lets vanilla pathfinding, the move dialog, and the final Move command share the same seam-aware destination value.
 - Wrapped side-map terrain copies now have map-layer raycast colliders so vanilla can detect right-click destination clicks on the copied map surface.
 - Task-force route and destination marker visuals are mirrored to the side maps from vanilla `MapUI.GetRoute(...)` results.
@@ -49,6 +49,10 @@
 - `0.1.106` removes the noisier route/path-extension debug stream and keeps consolidated movement diagnostics:
   - `UADVP map wrap diag click ...` records the click hit, selected marker visual position, desired destination, routing proxy, and map bounds.
   - `UADVP map wrap diag move ...` records the move-window destination, original routing proxy, whether the path endpoint was extended, and the final path summary.
+- `0.2.0` expands `Disc World` marker coverage:
+  - Wrapped dynamic marker copies now include `EventUI` mission/event markers under `MapUI.EventsRoot`.
+  - Wrapped marker copies mirror graphic, text, and line-renderer state from the authoritative marker so enemy task forces, mission icons, and other marker state changes remain visually current.
+  - Wrapped event/mission marker copies proxy click, hover, and leave handling to the original marker button.
 - Native `MapVisualGrid` cloning is the correct grid path. Earlier procedural grid attempts rendered on top of the map and changed ocean color.
 - Country overlays must be created after the game swaps neutral materials for live `player-*` materials. Creating them immediately after `CampaignMap.PostInit` produces grey masks.
 - The toggle is intended to work live:
@@ -63,9 +67,10 @@
 - The base map copies also receive a `MeshCollider` using the same mesh, layer, and tag as the vanilla map surface, so `CampaignMap.DetectClick()` can hit them.
 - Native side borders are hidden while wrap is enabled and restored when disabled.
 - Static visual roots are cloned and non-rendering behaviours/colliders are disabled so they do not act like live UI/game objects.
-- Port/task-force marker copies keep the original markers authoritative and derive their side-map positions from vanilla UI positions plus `+/- CampaignMap.mapWidth`.
+- Port/task-force/event marker copies keep the original markers authoritative and derive their side-map positions from vanilla UI positions plus `+/- CampaignMap.mapWidth`.
 - Port marker copies selectively re-enable the cloned `PortButton` raycast path and forward vanilla `OnClickH`, `OnEnter`, and `OnLeave` handling to the original `PortButton`.
 - Task-force marker copies selectively re-enable the cloned `ShipUI.Btn` raycast path and forward vanilla `OnClickH`, `OnEnter`, and `OnLeave` handling to the original `ShipUI.Btn`.
+- Event/mission marker copies selectively re-enable the cloned `EventUI.Btn` raycast path and forward vanilla `OnClickH`, `OnEnter`, and `OnLeave` handling to the original `EventUI.Btn`.
 - `CampaignMap.OnClickDetected` records raw, normalized, desired, effective, selected marker offset, and selected marker visual position. `desired` preserves the player-facing destination chosen by nearest-copy logic; `effective` is the value passed to vanilla pathfinding. For off-map desired destinations, effective is clamped to a small proxy just outside the nearest original map edge.
 - `MoveShipsWindow.ShowMapToMap(...)` is currently used as the safer hook to inspect and lightly repair the move-dialog route path. When the click used a routing proxy, the patch changes the dialog `to` argument back to the desired destination and appends that destination to `FullPath` if the vanilla path stopped at the original map edge.
 - Do not reintroduce a `RequestPath(...)` prefix that calls `RequestPath(...)` recursively without first proving the returned `PathResult` is safe for `MoveShipsWindow.UpdateTextData(...)` and `CampaignShipsMovementManager.BaseMoveShips(...)`.
@@ -75,8 +80,8 @@
 
 ## Known Limitations
 
-- Only port and task-force icon markers are wrapped so far. Battles, events, minefields, zones, and other live map markers may still use vanilla map behavior.
-- Port/task-force marker clicks and hover are proxied from wrapped copies. Movement destination clicks use visual side-map coordinates on wrapped map surfaces, but non-movement map-surface hit testing may still use vanilla map behavior.
+- Port, task-force, and `EventUI` mission/event icon markers are wrapped. Battles, minefields, zones, and other live map markers may still use vanilla map behavior.
+- Port/task-force/mission marker clicks and hover are proxied from wrapped copies. Movement destination clicks use visual side-map coordinates on wrapped map surfaces, but non-movement map-surface hit testing may still use vanilla map behavior.
 - Route visuals are mirrored, not regenerated as true cylindrical routes. If vanilla pathfinding chooses a long path, the visual copies will faithfully mirror that long path.
 - Camera panning is expanded, not mathematically wrapped. The camera can view the stitched copies, but coordinates are not normalized across the seam.
 - The feature is experimental and off by default because the player-facing illusion is promising but incomplete.
@@ -95,7 +100,7 @@
    - Either clone visual routes to side maps or redraw seam-aware route segments.
 
 3. Wrap the remaining passive dynamic visuals.
-   - Check battles, events, minefields, sea-control zones, and any other `MapUI` roots not covered by ports/task forces.
+   - Check battles, minefields, sea-control zones, and any other `MapUI` roots not covered by ports, task forces, and `EventUI` mission/event markers.
    - Keep clone counts cached and avoid scene scans in hot paths.
 
 4. Improve camera behavior.

@@ -395,7 +395,7 @@ internal static class CampaignMapWrapVisualPatch
         if (!LoggedDynamicMarkerCopies)
         {
             LoggedDynamicMarkerCopies = true;
-            Melon<UADVanillaPlusMod>.Logger.Msg("UADVP map wrap: syncing wrapped port/task-force marker copies.");
+            Melon<UADVanillaPlusMod>.Logger.Msg("UADVP map wrap: syncing wrapped dynamic marker copies.");
         }
 
         return created;
@@ -416,6 +416,8 @@ internal static class CampaignMapWrapVisualPatch
             ConfigurePortCloneClickProxy(source, copy);
         else if (kind == DynamicMarkerKind.TaskForce)
             ConfigureTaskForceCloneClickProxy(source, copy, xOffset);
+        else if (kind == DynamicMarkerKind.Event)
+            ConfigureEventCloneClickProxy(source, copy);
 
         return copy;
     }
@@ -436,7 +438,7 @@ internal static class CampaignMapWrapVisualPatch
         {
             shipCopy.offset = source.TryCast<ShipUI>()?.offset ?? shipCopy.offset;
             shipCopy.UpdatePositionScale(wrappedUiPosition, scale);
-            SyncDynamicCloneTextLayout(copy, source.gameObject);
+            SyncDynamicCloneVisuals(copy, source.gameObject, xOffset);
             return;
         }
 
@@ -444,7 +446,7 @@ internal static class CampaignMapWrapVisualPatch
         if (copyElement != null)
         {
             copyElement.UpdatePositionScale(wrappedUiPosition, scale);
-            SyncDynamicCloneTextLayout(copy, source.gameObject);
+            SyncDynamicCloneVisuals(copy, source.gameObject, xOffset);
         }
     }
 
@@ -456,6 +458,9 @@ internal static class CampaignMapWrapVisualPatch
         if (source.TryCast<ShipUI>() != null)
             return IsChildOf(source.transform, mapUi.ShipsRoot);
 
+        if (source.TryCast<EventUI>() != null)
+            return IsChildOf(source.transform, mapUi.EventsRoot);
+
         return false;
     }
 
@@ -466,6 +471,9 @@ internal static class CampaignMapWrapVisualPatch
 
         if (source.TryCast<ShipUI>() != null)
             return DynamicMarkerKind.TaskForce;
+
+        if (source.TryCast<EventUI>() != null)
+            return DynamicMarkerKind.Event;
 
         return DynamicMarkerKind.Unknown;
     }
@@ -828,6 +836,30 @@ internal static class CampaignMapWrapVisualPatch
         leaveProxy.action = new System.Action(() => ProxyTaskForceLeave(sourceShip));
     }
 
+    private static void ConfigureEventCloneClickProxy(CampaignMapElement source, GameObject copy)
+    {
+        EventUI? sourceEvent = source.TryCast<EventUI>();
+        EventUI? copyEvent = copy.GetComponent<EventUI>();
+        Button? sourceButton = sourceEvent?.Btn;
+        Button? proxyButton = copyEvent?.Btn ?? copy.GetComponentInChildren<Button>(true);
+        if (sourceEvent == null || sourceButton == null || proxyButton == null)
+            return;
+
+        EnableProxyButtonRaycastPath(copy, proxyButton);
+
+        proxyButton.onClick.RemoveAllListeners();
+        proxyButton.onClick.AddListener(new System.Action(() => ProxyEventClick(sourceEvent, null)));
+
+        OnClickH clickProxy = proxyButton.gameObject.AddComponent<OnClickH>();
+        clickProxy.action = new System.Action<PointerEventData>(eventData => ProxyEventClick(sourceEvent, eventData));
+
+        OnEnter enterProxy = proxyButton.gameObject.AddComponent<OnEnter>();
+        enterProxy.action = new System.Action(() => ProxyEventEnter(sourceEvent));
+
+        OnLeave leaveProxy = proxyButton.gameObject.AddComponent<OnLeave>();
+        leaveProxy.action = new System.Action(() => ProxyEventLeave(sourceEvent));
+    }
+
     private static void EnableProxyButtonRaycastPath(GameObject copy, Button proxyButton)
     {
         CanvasGroup[] canvasGroups = copy.GetComponentsInChildren<CanvasGroup>(true);
@@ -932,6 +964,36 @@ internal static class CampaignMapWrapVisualPatch
         sourceLeave?.action?.Invoke();
         if (sourceShip != null)
             SyncRouteCopies(sourceShip.Route);
+    }
+
+    private static void ProxyEventClick(EventUI sourceEvent, PointerEventData? eventData)
+    {
+        Button? sourceButton = sourceEvent?.Btn;
+        if (sourceButton == null)
+            return;
+
+        OnClickH? sourceClick = sourceButton.GetComponent<OnClickH>();
+        if (sourceClick?.action != null && eventData != null)
+        {
+            sourceClick.action.Invoke(eventData);
+            return;
+        }
+
+        sourceButton.onClick.Invoke();
+    }
+
+    private static void ProxyEventEnter(EventUI sourceEvent)
+    {
+        Button? sourceButton = sourceEvent == null ? null : sourceEvent.Btn;
+        OnEnter? sourceEnter = sourceButton?.GetComponent<OnEnter>();
+        sourceEnter?.action?.Invoke();
+    }
+
+    private static void ProxyEventLeave(EventUI sourceEvent)
+    {
+        Button? sourceButton = sourceEvent == null ? null : sourceEvent.Btn;
+        OnLeave? sourceLeave = sourceButton?.GetComponent<OnLeave>();
+        sourceLeave?.action?.Invoke();
     }
 
     private static RouteCopySet? GetOrCreateRouteCopies(Route source)
@@ -1063,6 +1125,80 @@ internal static class CampaignMapWrapVisualPatch
         {
             copy.DestinationRenderer.enabled = source.DestinationRenderer.enabled;
             copy.DestinationRenderer.sharedMaterial = source.DestinationRenderer.sharedMaterial;
+        }
+    }
+
+    private static void SyncDynamicCloneVisuals(GameObject copy, GameObject source, float xOffset)
+    {
+        SyncDynamicCloneGraphics(copy, source);
+        SyncDynamicCloneTextLayout(copy, source);
+        SyncDynamicCloneLineRenderers(copy, source, xOffset);
+    }
+
+    private static void SyncDynamicCloneGraphics(GameObject copy, GameObject source)
+    {
+        Graphic[] sourceGraphics = source.GetComponentsInChildren<Graphic>(true);
+        Graphic[] copyGraphics = copy.GetComponentsInChildren<Graphic>(true);
+        int count = Mathf.Min(sourceGraphics.Length, copyGraphics.Length);
+
+        for (int i = 0; i < count; i++)
+        {
+            Graphic sourceGraphic = sourceGraphics[i];
+            Graphic copyGraphic = copyGraphics[i];
+            if (sourceGraphic == null || copyGraphic == null)
+                continue;
+
+            copyGraphic.enabled = sourceGraphic.enabled;
+            copyGraphic.color = sourceGraphic.color;
+            copyGraphic.material = sourceGraphic.material;
+
+            Image? sourceImage = sourceGraphic.TryCast<Image>();
+            Image? copyImage = copyGraphic.TryCast<Image>();
+            if (sourceImage == null || copyImage == null)
+                continue;
+
+            copyImage.sprite = sourceImage.sprite;
+            copyImage.overrideSprite = sourceImage.overrideSprite;
+            copyImage.type = sourceImage.type;
+            copyImage.preserveAspect = sourceImage.preserveAspect;
+            copyImage.fillCenter = sourceImage.fillCenter;
+            copyImage.fillMethod = sourceImage.fillMethod;
+            copyImage.fillOrigin = sourceImage.fillOrigin;
+            copyImage.fillAmount = sourceImage.fillAmount;
+            copyImage.fillClockwise = sourceImage.fillClockwise;
+        }
+    }
+
+    private static void SyncDynamicCloneLineRenderers(GameObject copy, GameObject source, float xOffset)
+    {
+        LineRenderer[] sourceLines = source.GetComponentsInChildren<LineRenderer>(true);
+        LineRenderer[] copyLines = copy.GetComponentsInChildren<LineRenderer>(true);
+        int count = Mathf.Min(sourceLines.Length, copyLines.Length);
+
+        for (int i = 0; i < count; i++)
+        {
+            LineRenderer sourceLine = sourceLines[i];
+            LineRenderer copyLine = copyLines[i];
+            if (sourceLine == null || copyLine == null)
+                continue;
+
+            copyLine.gameObject.SetActive(sourceLine.gameObject.activeSelf);
+            copyLine.enabled = sourceLine.enabled;
+            copyLine.useWorldSpace = sourceLine.useWorldSpace;
+            copyLine.positionCount = sourceLine.positionCount;
+            copyLine.sharedMaterial = sourceLine.sharedMaterial;
+            copyLine.startWidth = sourceLine.startWidth;
+            copyLine.endWidth = sourceLine.endWidth;
+            copyLine.startColor = sourceLine.startColor;
+            copyLine.endColor = sourceLine.endColor;
+
+            for (int point = 0; point < sourceLine.positionCount; point++)
+            {
+                Vector3 position = sourceLine.GetPosition(point);
+                if (sourceLine.useWorldSpace)
+                    position.x += xOffset;
+                copyLine.SetPosition(point, position);
+            }
         }
     }
 
@@ -1434,7 +1570,8 @@ internal static class CampaignMapWrapVisualPatch
     {
         Unknown,
         Port,
-        TaskForce
+        TaskForce,
+        Event
     }
 
     private sealed class DynamicMarkerCopySet

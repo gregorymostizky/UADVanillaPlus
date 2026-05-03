@@ -33,7 +33,7 @@ $env:NUGET_PACKAGES='E:\Codex\.nuget\packages'
 E:\Codex\dotnet\dotnet.exe build E:\Codex\UADVanillaPlus\UADVanillaPlus.sln -c Release /p:RestoreConfigFile=E:\Codex\UADVanillaPlus\NuGet.Config
 ```
 
-Copy the built DLL directly when requested:
+Copy the built DLL directly after a successful build. Do not run a process check first; if the game has the DLL locked, let the copy fail and report that:
 
 ```powershell
 Copy-Item -LiteralPath 'E:\Codex\UADVanillaPlus\UADVanillaPlus\bin\Release\net6.0\UADVanillaPlus.dll' -Destination 'E:\SteamLibrary\steamapps\common\Ultimate Admiral Dreadnoughts\Mods\UADVanillaPlus.dll' -Force
