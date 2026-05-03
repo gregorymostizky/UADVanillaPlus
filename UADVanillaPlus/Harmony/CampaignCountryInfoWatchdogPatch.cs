@@ -84,13 +84,13 @@ internal static class CampaignCountryInfoWatchdogPatch
 
     private static bool MissingAnyVpMarker(CampaignCountryInfoUI countryInfo)
         => !HasText(countryInfo.ActiveFleetShips, " port)") ||
-           !HasText(countryInfo.ShipyardSize, "Dock ") ||
-           !HasText(countryInfo.ShipyardSize, ">TR ") ||
+           !CampaignConstructionStatusPatch.HasMaintenanceMarkers(countryInfo) ||
            !HasText(countryInfo.Technology, "(Next ");
 
     private static void LogMarkerStateOnce(CampaignCountryInfoUI countryInfo, int applied)
     {
-        string state = $"{applied}|{countryInfo.gameObject.name}|{HasText(countryInfo.ActiveFleetShips, " port)")}|{HasText(countryInfo.ShipyardSize, "Dock ")}|{HasText(countryInfo.ShipyardSize, ">TR ")}|{HasText(countryInfo.Technology, "(Next ")}";
+        bool hasMaintenance = CampaignConstructionStatusPatch.HasMaintenanceMarkers(countryInfo);
+        string state = $"{applied}|{countryInfo.gameObject.name}|{HasText(countryInfo.ActiveFleetShips, " port)")}|{hasMaintenance}|{hasMaintenance}|{HasText(countryInfo.Technology, "(Next ")}";
         if (state == lastLoggedState)
             return;
 

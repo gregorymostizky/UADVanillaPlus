@@ -3,6 +3,7 @@ using HarmonyLib;
 using Il2Cpp;
 using MelonLoader;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace UADVanillaPlus.Harmony;
 
@@ -19,12 +20,12 @@ internal static class CampaignConstructionStatusPatch
     private const string TransportGoodColor = "#A7D37A";
     private const string TransportWarnColor = "#D8C06A";
     private const string TransportBadColor = "#D37A7A";
+    private const string MaintenanceLineName = "UADVP_MaintenanceLine";
     private const string ConstructionTooltip = "Shown as own builds / foreign contracts (commissioning).\nForeign contracts are ships this nation's yards are building for another nation.\nCommissioning ships are counted separately from ships still under construction.";
     private static readonly HashSet<GameObject> TooltipTargets = new();
     private static readonly HashSet<GameObject> DockTooltipTargets = new();
     private static string lastLoggedSummary = string.Empty;
     private static string lastLoggedMaintenanceSummary = string.Empty;
-    private static string lastLoggedMaintenanceTrace = string.Empty;
     private static string lastLoggedApplySkip = string.Empty;
 
     [HarmonyPrefix]
@@ -166,12 +167,13 @@ internal static class CampaignConstructionStatusPatch
         TransportCapacityStatus transport = BuildTransportCapacityStatus(player);
         string beforeText = ui.ShipyardSize.text ?? string.Empty;
         string strippedText = StripMaintenanceLine(beforeText);
-        string maintenanceLine = $"{status.Display} | {transport.Display}";
-        string nextText = string.IsNullOrWhiteSpace(strippedText)
-            ? maintenanceLine
-            : $"{strippedText}\n{maintenanceLine}";
+        string maintenanceText = $"{status.Display} | {transport.Display}";
 
-        ui.ShipyardSize.text = nextText;
+        ui.ShipyardSize.text = strippedText;
+        RemoveFloatingMaintenanceLine(ui);
+        UpdateShipbuildingCapacityMaintenance(ui, maintenanceText);
+        RebuildCountryInfoLayout(ui);
+
         EnsureDockyardTooltip(ui);
 
         string summary = $"{status.LogSummary}; {transport.LogSummary}";
@@ -182,7 +184,6 @@ internal static class CampaignConstructionStatusPatch
                 $"UADVP campaign maintenance status: displayed {summary} in {stopwatch.ElapsedMilliseconds} ms.");
         }
 
-        LogMaintenanceTrace(ui, beforeText, strippedText, nextText, summary);
     }
 
     internal static string DebugMaintenanceText(CampaignCountryInfoUI? ui)
@@ -190,29 +191,54 @@ internal static class CampaignConstructionStatusPatch
         if (ui?.ShipyardSize == null)
             return "<missing ShipyardSize>";
 
-        return CompactText(ui.ShipyardSize.text);
+        return CompactText($"{ui.ShipyardSize.text}\n{ui.ShipbuildingCapacity?.text}");
     }
 
     internal static bool HasMaintenanceMarkers(CampaignCountryInfoUI? ui)
-        => ui?.ShipyardSize != null &&
-           HasMarker(ui.ShipyardSize.text, "Dock ") &&
-           HasMarker(ui.ShipyardSize.text, ">TR ");
-
-    private static void LogMaintenanceTrace(
-        CampaignCountryInfoUI ui,
-        string beforeText,
-        string strippedText,
-        string nextText,
-        string summary)
     {
-        bool beforeHadMarkers = HasMarker(beforeText, "Dock ") && HasMarker(beforeText, ">TR ");
-        bool afterHasMarkers = HasMarker(nextText, "Dock ") && HasMarker(nextText, ">TR ");
-        string trace = $"{ui.gameObject.name}|active={ui.gameObject.activeInHierarchy}|before={beforeHadMarkers}|after={afterHasMarkers}|base='{CompactText(strippedText)}'|next='{CompactText(nextText)}'|{summary}";
-        if (trace == lastLoggedMaintenanceTrace)
+        if (ui?.ShipyardSize == null)
+            return false;
+
+        string text = $"{ui.ShipyardSize.text}\n{ui.ShipbuildingCapacity?.text}";
+        return HasMarker(text, "Dock ") && HasMarker(text, ">TR ");
+    }
+
+    private static void UpdateShipbuildingCapacityMaintenance(CampaignCountryInfoUI ui, string maintenanceText)
+    {
+        if (ui.ShipbuildingCapacity == null)
             return;
 
-        lastLoggedMaintenanceTrace = trace;
-        Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP campaign maintenance trace: {trace}.");
+        string capacityText = StripMaintenanceLine(ui.ShipbuildingCapacity.text ?? string.Empty);
+        ui.ShipbuildingCapacity.text = string.IsNullOrWhiteSpace(capacityText)
+            ? maintenanceText
+            : $"{maintenanceText}\n{capacityText}";
+    }
+
+    private static void RemoveFloatingMaintenanceLine(CampaignCountryInfoUI ui)
+    {
+        if (ui.ShipyardSize == null)
+            return;
+
+        DestroyMaintenanceLine(ui.ShipyardSize.transform.Find(MaintenanceLineName));
+        DestroyMaintenanceLine(ui.ShipyardSize.transform.parent?.Find(MaintenanceLineName));
+    }
+
+    private static void DestroyMaintenanceLine(Transform? marker)
+    {
+        if (marker == null)
+            return;
+
+        UnityEngine.Object.Destroy(marker.gameObject);
+    }
+
+    private static void RebuildCountryInfoLayout(CampaignCountryInfoUI ui)
+    {
+        RectTransform? rect = ui.RTransform;
+        if (rect == null)
+            rect = ui.GetComponent<RectTransform>();
+
+        if (rect != null)
+            LayoutRebuilder.ForceRebuildLayoutImmediate(rect);
     }
 
     private static bool HasMarker(string? text, string marker)
@@ -233,13 +259,34 @@ internal static class CampaignConstructionStatusPatch
             return string.Empty;
 
         IEnumerable<string> vanillaLines = text
+            .Replace("\r", string.Empty)
             .Split('\n')
+            .Select(StripMaintenanceSuffix)
             .Where(static line =>
                 !line.Contains("Dock Idle", StringComparison.Ordinal) &&
                 !line.Contains("Dock Expanding:", StringComparison.Ordinal) &&
+                !line.Contains("Dock Exp ", StringComparison.Ordinal) &&
                 !line.Contains(">TR ", StringComparison.Ordinal));
 
         return string.Join("\n", vanillaLines).TrimEnd();
+    }
+
+    private static string StripMaintenanceSuffix(string line)
+    {
+        int suffixStart = line.IndexOf(" | <color=", StringComparison.Ordinal);
+        if (suffixStart >= 0 &&
+            (line.IndexOf("Dock ", suffixStart, StringComparison.Ordinal) >= 0 ||
+             line.IndexOf(">TR ", suffixStart, StringComparison.Ordinal) >= 0))
+        {
+            return line[..suffixStart].TrimEnd();
+        }
+
+        suffixStart = line.IndexOf(" | Dock ", StringComparison.Ordinal);
+        if (suffixStart >= 0)
+            return line[..suffixStart].TrimEnd();
+
+        suffixStart = line.IndexOf(" | TR ", StringComparison.Ordinal);
+        return suffixStart >= 0 ? line[..suffixStart].TrimEnd() : line;
     }
 
     private static DockyardStatus BuildDockyardStatus(Player player)
@@ -256,7 +303,7 @@ internal static class CampaignConstructionStatusPatch
         string months = $"{elapsed}/{player.shipyardBuildMonthTotal} mo";
         string amount = FormatWeightSafe(player.shipyardTotalBuildAmount);
         return new DockyardStatus(
-            $"<color={DockBuildingColor}>Dock Expanding: {months}</color>",
+            $"<color={DockBuildingColor}>Dock Exp {elapsed}/{player.shipyardBuildMonthTotal}m</color>",
             $"Dock expansion is active.\nRemaining: {player.shipyardBuildMonthLeft} months\nPlanned increase: {amount}",
             $"expanding {months}, left {player.shipyardBuildMonthLeft}, amount {amount}");
     }
