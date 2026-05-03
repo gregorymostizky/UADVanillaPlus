@@ -51,7 +51,7 @@ Copy-Item -LiteralPath 'E:\Codex\UADVanillaPlus\UADVanillaPlus\bin\Release\net6.
 - `Harmony/CampaignActiveFleetStatusPatch.cs`: campaign Active Fleet in-port count display only.
 - `Harmony/CampaignTechnologyStatusPatch.cs`: campaign country-info technology timing indicator only.
 - `Harmony/InGameOptionsMenuPatch.cs`: top-right UAD:VP in-game options menu only.
-- `Harmony/CampaignPoliticsDeclareWarPatch.cs`: politics row Declare War button only.
+- `Harmony/CampaignPoliticsDeclareWarPatch.cs`: politics row Declare War and Force Peace buttons only.
 - `Harmony/CampaignMapWrapVisualPatch.cs`: experimental campaign map visual wrap-around only; off by default from the UAD:VP Experimental options section.
 - `Harmony/BattleTimeSpeedLimitPatch.cs`: battle simulation speed limit QoL only.
 - `Harmony/BattleWeatherBalancePatch.cs`: battle weather/daytime balance option only.

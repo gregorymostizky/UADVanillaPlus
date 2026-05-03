@@ -2,7 +2,7 @@
 
 UAD Vanilla Plus (`UAD:VP`) is a lightweight mod for Ultimate Admiral: Dreadnoughts that keeps the base game feel while adding small quality-of-life improvements.
 
-Current version: `0.2.11`
+Current version: `0.2.14`
 
 ## Philosophy
 
@@ -39,7 +39,7 @@ Start the game normally after copying the DLL. If the mod loads, `UAD:VP` and th
 - <u>Campaign active fleet port count</u>: show how many active vessels are currently in port.
 - <u>Campaign construction summaries</u>: split own builds, foreign contracts, and commissioning ships in the existing build counts.
 - <u>Campaign technology indicator</u>: show a compact estimate for the next expected research discovery.
-- <u>Declare War politics action</u>: add a direct Declare War button with confirmation to campaign politics rows.
+- <u>Direct diplomacy politics actions</u>: add Declare War and Force Peace buttons with confirmation to campaign politics rows, with Force Peace using the vanilla reparation flow when war victory points produce a clear winner.
 - <u>In-game options menu</u>: control UAD:VP balance options from the top-right game UI.
 
 **Balance:**
