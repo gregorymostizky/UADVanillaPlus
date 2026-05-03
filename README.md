@@ -2,7 +2,7 @@
 
 UAD Vanilla Plus (`UAD:VP`) is a lightweight mod for Ultimate Admiral: Dreadnoughts that keeps the base game feel while adding small quality-of-life improvements.
 
-Current version: `0.2.14`
+Current version: `0.2.20`
 
 ## Philosophy
 
@@ -75,7 +75,6 @@ Start the game normally after copying the DLL. If the mod loads, `UAD:VP` and th
 
 ## Known Issues
 
-- Campaign maintenance indicators may not appear immediately on initial campaign load. They are restored after switching campaign tabs.
 - Map Geometry's `Disc World` mode is still experimental. Map surface, labels, political overlays, grid visuals, wrapped port/task-force/mission marker clicks, task-force route visuals, and wrapped-map movement destination clicks wrap, but some less-common map interactions and marker types may still use vanilla map behavior.
 
 ## Building And Running From Source
