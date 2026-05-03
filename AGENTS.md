@@ -6,6 +6,7 @@
 - Keep the in-game overlay version and MelonLoader metadata consistent through `ModInfo.DisplayText`.
 - After a successful build, always try the built-DLL copy immediately. Copy directly to the game `Mods` folder without first checking whether the game is running; if the DLL is locked, let the copy fail and report that.
 - When the user says to "merge" completed work, treat that as commit locally and push the current branch unless they explicitly limit it to local-only.
+- If the user explicitly asks to push or merge to `master`, do that directly rather than stopping at a feature branch or PR branch. This explicit request is the approval required by the `master` safety rule below.
 - Keep feature ports modular. Each QoL port or gameplay change should ideally live in its own source file under a clear folder, with only small shared helpers in `GameData` or similar common areas.
 - Do not add loose config files for player-facing balance options. Balance-affecting features should be controlled through the in-game VP options menu, with shared option state living behind a typed helper in `GameData`.
 - Keep QoL changes always enabled, while balance changes default to improved/on and can be toggled individually back to vanilla in-game.
