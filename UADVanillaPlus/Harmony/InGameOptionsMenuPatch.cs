@@ -25,6 +25,7 @@ internal static class InGameOptionsMenuPatch
     private const string MenuName = "UADVP Options";
     private const string ContentName = "UADVP_OptionsContent";
     private const string BattleWeatherOptionName = "UADVP_Option_BattleWeather";
+    private const string DesignAccuracyPenaltiesOptionName = "UADVP_Option_DesignAccuracyPenalties";
     private const string PortStrikeOptionName = "UADVP_Option_PortStrike";
     private const string MajorShipTorpedoesOptionName = "UADVP_Option_MajorShipTorpedoes";
 
@@ -263,14 +264,28 @@ internal static class InGameOptionsMenuPatch
                     pane.transform,
                     BattleWeatherOptionName,
                     "Battle Weather",
+                    "Always Sunny forces battles to start in daytime fair weather. Vanilla keeps the game's random battle time and weather rolls.",
+                    true,
                     ("Always Sunny", ModSettings.BattleWeatherAlwaysSunny, () => SetBattleWeatherMode(true)),
                     ("Vanilla", !ModSettings.BattleWeatherAlwaysSunny, () => SetBattleWeatherMode(false)));
+                AddSegmentedOption(
+                    pane.transform,
+                    DesignAccuracyPenaltiesOptionName,
+                    "Accuracy Penalties",
+                    "Reduces extreme smoke, stability, and instability accuracy penalties from ship design. This helps prevent otherwise decent ships from becoming unrealistically unable to hit. The active effect remains in battles, but changing this option is disabled there because the game has already parsed battle stats.",
+                    CanChangeAccuracyPenalties(),
+                    ("/10", ModSettings.DesignAccuracyPenaltyMode == ModSettings.AccuracyPenaltyMode.Div10, () => SetDesignAccuracyPenaltiesMode(ModSettings.AccuracyPenaltyMode.Div10)),
+                    ("/5", ModSettings.DesignAccuracyPenaltyMode == ModSettings.AccuracyPenaltyMode.Div5, () => SetDesignAccuracyPenaltiesMode(ModSettings.AccuracyPenaltyMode.Div5)),
+                    ("/2", ModSettings.DesignAccuracyPenaltyMode == ModSettings.AccuracyPenaltyMode.Div2, () => SetDesignAccuracyPenaltiesMode(ModSettings.AccuracyPenaltyMode.Div2)),
+                    ("Vanilla", ModSettings.DesignAccuracyPenaltyMode == ModSettings.AccuracyPenaltyMode.Vanilla, () => SetDesignAccuracyPenaltiesMode(ModSettings.AccuracyPenaltyMode.Vanilla)));
                 break;
             case Section.Campaign:
                 AddSegmentedOption(
                     pane.transform,
                     PortStrikeOptionName,
                     "Port Strike",
+                    "Balanced scales port strike transport losses to the attacking force instead of letting tiny raids destroy excessive transport capacity.",
+                    true,
                     ("Balanced", ModSettings.PortStrikeBalanced, () => SetPortStrikeMode(true)),
                     ("Vanilla", !ModSettings.PortStrikeBalanced, () => SetPortStrikeMode(false)));
                 break;
@@ -279,23 +294,21 @@ internal static class InGameOptionsMenuPatch
                     pane.transform,
                     MajorShipTorpedoesOptionName,
                     "CA+ Torpedoes",
+                    "Disallowed prevents heavy cruisers and larger ships from mounting torpedoes. This nudges designs toward more plausible fleet roles and avoids oversized torpedo platforms.",
+                    true,
                     ("Disallowed", ModSettings.MajorShipTorpedoesRestricted, () => SetMajorShipTorpedoesMode(true)),
                     ("Vanilla", !ModSettings.MajorShipTorpedoesRestricted, () => SetMajorShipTorpedoesMode(false)));
                 break;
         }
     }
 
-    private static void AddSegmentedOption(
-        Transform parent,
-        string name,
-        string label,
-        (string Label, bool Selected, Action OnPress) first,
-        (string Label, bool Selected, Action OnPress) second)
+    private static void AddSegmentedOption(Transform parent, string name, string label, string tooltip, bool interactable, params (string Label, bool Selected, Action OnPress)[] segments)
     {
         GameObject row = new(name);
         row.transform.SetParent(parent, false);
         Image rowImage = row.AddComponent<Image>();
         rowImage.color = RowBackground;
+        AddTooltip(row, $"{label}\n{tooltip}");
         HorizontalLayoutGroup rowLayout = row.AddComponent<HorizontalLayoutGroup>();
         rowLayout.padding = new RectOffset
         {
@@ -315,8 +328,8 @@ internal static class InGameOptionsMenuPatch
         Text labelText = AddText(row.transform, label, 13, TextAnchor.MiddleLeft);
         AddLayout(labelText.gameObject, minWidth: 155f, flexibleWidth: 1f);
 
-        AddSegmentButton(row.transform, first.Label, first.Selected, first.OnPress);
-        AddSegmentButton(row.transform, second.Label, second.Selected, second.OnPress);
+        foreach (var segment in segments)
+            AddSegmentButton(row.transform, segment.Label, segment.Selected, segment.OnPress, segments.Length > 2 ? 64f : 112f, interactable, $"{label}: {segment.Label}\n{tooltip}");
     }
 
     private static void AddSectionButton(Transform parent, Section section, string label)
@@ -326,11 +339,13 @@ internal static class InGameOptionsMenuPatch
         image.color = selectedSection == section ? SelectedGold : SegmentIdle;
     }
 
-    private static void AddSegmentButton(Transform parent, string label, bool selected, Action onPress)
+    private static void AddSegmentButton(Transform parent, string label, bool selected, Action onPress, float width, bool interactable, string tooltip)
     {
-        Button button = AddActionButton(parent, label, onPress, width: 112f);
+        Button button = AddActionButton(parent, label, onPress, width);
+        button.interactable = interactable;
+        AddTooltip(button.gameObject, tooltip);
         Image image = button.GetComponent<Image>() ?? button.gameObject.AddComponent<Image>();
-        image.color = selected ? SelectedGold : SegmentDisabled;
+        image.color = selected && interactable ? SelectedGold : SegmentDisabled;
     }
 
     private static Button AddActionButton(Transform parent, string label, Action onPress, float width)
@@ -390,6 +405,26 @@ internal static class InGameOptionsMenuPatch
         RefreshLauncherButton();
     }
 
+    private static void SetDesignAccuracyPenaltiesMode(ModSettings.AccuracyPenaltyMode mode)
+    {
+        if (!CanChangeAccuracyPenalties())
+        {
+            Melon<UADVanillaPlusMod>.Logger.Warning("UADVP option: Accuracy Penalties cannot be changed while a battle is loading or active.");
+            RefreshMenu();
+            RefreshLauncherButton();
+            return;
+        }
+
+        if (ModSettings.DesignAccuracyPenaltyMode != mode)
+            ModSettings.DesignAccuracyPenaltyMode = mode;
+
+        RefreshMenu();
+        RefreshLauncherButton();
+    }
+
+    private static bool CanChangeAccuracyPenalties()
+        => !AccuracyPenaltyBalance.IsBattleOrLoading();
+
     private static void SetPortStrikeMode(bool balanced)
     {
         if (ModSettings.PortStrikeBalanced != balanced)
@@ -435,22 +470,27 @@ internal static class InGameOptionsMenuPatch
     }
 
     private static bool AnyBalanceOptionEnabled()
-        => ModSettings.BattleWeatherAlwaysSunny || ModSettings.PortStrikeBalanced || ModSettings.MajorShipTorpedoesRestricted;
+        => ModSettings.BattleWeatherAlwaysSunny || ModSettings.DesignAccuracyPenaltiesBalanced || ModSettings.PortStrikeBalanced || ModSettings.MajorShipTorpedoesRestricted;
 
     private static void AddLauncherTooltip(GameObject buttonObject)
+        => AddTooltip(
+            buttonObject,
+            $"UAD:VP Options\nBattle Weather: {BattleWeatherModeText(ModSettings.BattleWeatherAlwaysSunny)}\nAccuracy Penalties: {DesignAccuracyPenaltiesModeText(ModSettings.DesignAccuracyPenaltyMode)}\nPort Strike: {PortStrikeModeText(ModSettings.PortStrikeBalanced)}\nCA+ Torpedoes: {MajorShipTorpedoesModeText(ModSettings.MajorShipTorpedoesRestricted)}",
+            () => launcherButton != null && launcherButton.interactable);
+
+    private static void AddTooltip(GameObject target, string text, Func<bool>? canShow = null)
     {
-        OnEnter onEnter = buttonObject.AddComponent<OnEnter>();
+        RemoveTooltipHandlers(target);
+        OnEnter onEnter = target.AddComponent<OnEnter>();
         onEnter.action = new System.Action(() =>
         {
-            if (G.ui == null || launcherButton == null || !launcherButton.interactable)
+            if (G.ui == null || canShow?.Invoke() == false)
                 return;
 
-            G.ui.ShowTooltip(
-                $"UAD:VP Options\nBattle Weather: {BattleWeatherModeText(ModSettings.BattleWeatherAlwaysSunny)}\nPort Strike: {PortStrikeModeText(ModSettings.PortStrikeBalanced)}\nCA+ Torpedoes: {MajorShipTorpedoesModeText(ModSettings.MajorShipTorpedoesRestricted)}",
-                buttonObject);
+            G.ui.ShowTooltip(text, target);
         });
 
-        OnLeave onLeave = buttonObject.AddComponent<OnLeave>();
+        OnLeave onLeave = target.AddComponent<OnLeave>();
         onLeave.action = new System.Action(() =>
         {
             try { G.ui?.HideTooltip(); }
@@ -593,6 +633,9 @@ internal static class InGameOptionsMenuPatch
 
     private static string PortStrikeModeText(bool balanced)
         => balanced ? "Balanced" : "Vanilla";
+
+    private static string DesignAccuracyPenaltiesModeText(ModSettings.AccuracyPenaltyMode mode)
+        => ModSettings.AccuracyPenaltyModeText(mode);
 
     private static string MajorShipTorpedoesModeText(bool restricted)
         => restricted ? "Disallowed" : "Vanilla";

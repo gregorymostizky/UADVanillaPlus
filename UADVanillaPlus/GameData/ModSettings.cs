@@ -10,11 +10,21 @@ internal static class ModSettings
 {
     private const string PortStrikeBalancedKey = "uadvp_port_strike_balanced";
     private const string BattleWeatherAlwaysSunnyKey = "uadvp_battle_weather_always_sunny";
+    private const string DesignAccuracyPenaltyModeKey = "uadvp_design_accuracy_penalty_mode";
     private const string MajorShipTorpedoesRestrictedKey = "uadvp_major_ship_torpedoes_restricted";
 
     private static bool? portStrikeBalanced;
     private static bool? battleWeatherAlwaysSunny;
+    private static AccuracyPenaltyMode? designAccuracyPenaltyMode;
     private static bool? majorShipTorpedoesRestricted;
+
+    internal enum AccuracyPenaltyMode
+    {
+        Div10 = 10,
+        Div5 = 5,
+        Div2 = 2,
+        Vanilla = 1,
+    }
 
     internal static bool PortStrikeBalanced
     {
@@ -40,6 +50,25 @@ internal static class ModSettings
         }
     }
 
+    internal static AccuracyPenaltyMode DesignAccuracyPenaltyMode
+    {
+        get => designAccuracyPenaltyMode ??= LoadAccuracyPenaltyMode();
+        set
+        {
+            if (AccuracyPenaltyBalance.IsBattleOrLoading())
+            {
+                Melon<UADVanillaPlusMod>.Logger.Warning("UADVP option: Accuracy Penalties cannot be changed while a battle is loading or active.");
+                return;
+            }
+
+            designAccuracyPenaltyMode = value;
+            PlayerPrefs.SetInt(DesignAccuracyPenaltyModeKey, (int)value);
+            PlayerPrefs.Save();
+            Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP option: Design Accuracy Penalties mode {AccuracyPenaltyModeText(value)}.");
+            AccuracyPenaltyBalance.TryReapplyLoadedStats(value);
+        }
+    }
+
     internal static bool MajorShipTorpedoesRestricted
     {
         get => majorShipTorpedoesRestricted ??= PlayerPrefs.GetInt(MajorShipTorpedoesRestrictedKey, 1) != 0;
@@ -50,5 +79,20 @@ internal static class ModSettings
             PlayerPrefs.Save();
             Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP option: CA+ Torpedoes mode {(value ? "Disallowed" : "Vanilla")}.");
         }
+    }
+
+    internal static bool DesignAccuracyPenaltiesBalanced
+        => DesignAccuracyPenaltyMode != AccuracyPenaltyMode.Vanilla;
+
+    internal static float AccuracyPenaltyDivisor(AccuracyPenaltyMode mode)
+        => mode == AccuracyPenaltyMode.Vanilla ? 1f : (float)mode;
+
+    internal static string AccuracyPenaltyModeText(AccuracyPenaltyMode mode)
+        => mode == AccuracyPenaltyMode.Vanilla ? "Vanilla" : $"/{(int)mode}";
+
+    private static AccuracyPenaltyMode LoadAccuracyPenaltyMode()
+    {
+        int stored = PlayerPrefs.GetInt(DesignAccuracyPenaltyModeKey, (int)AccuracyPenaltyMode.Div5);
+        return Enum.IsDefined(typeof(AccuracyPenaltyMode), stored) ? (AccuracyPenaltyMode)stored : AccuracyPenaltyMode.Div5;
     }
 }

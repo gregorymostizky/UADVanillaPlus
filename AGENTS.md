@@ -44,6 +44,9 @@ Copy-Item -LiteralPath 'E:\Codex\UADVanillaPlus\UADVanillaPlus\bin\Release\net6.
 - `Harmony/CampaignPoliticsDeclareWarPatch.cs`: politics row Declare War button only.
 - `Harmony/BattleTimeSpeedLimitPatch.cs`: battle simulation speed limit QoL only.
 - `Harmony/BattleWeatherBalancePatch.cs`: battle weather/daytime balance option only.
+- `Harmony/BattleAccuracyPenaltyBalancePatch.cs` and `GameData/AccuracyPenaltyBalance.cs`: battle design-side accuracy penalty balance option only; rewrites selected `StatData.effect` strings before vanilla `PostProcess` parses them, avoiding combat-time overhead and loaded-dictionary mutation.
+- `Harmony/BattleStartAccuracyBreakdownPatch.cs`: battle-accept design accuracy diagnostic logging only.
+- `Harmony/Il2CppInteropExceptionPatch.cs`: compatibility/debug logging for Il2Cpp trampoline exceptions only.
 - `Harmony/PortStrikeBalancePatch.cs`: port strike transport-loss balance option only.
 - `Harmony/DesignTorpedoRestrictionPatch.cs`: CA+ torpedo availability balance option only.
 - `GameData/CampaignDiplomacyActions.cs`: small diplomacy validation/action helpers for campaign politics patches.
