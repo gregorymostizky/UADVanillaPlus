@@ -4,7 +4,8 @@
 
 - Bump `UADVanillaPlus/ModInfo.cs` `MelonVersion` for every user-visible code or behavior change.
 - Keep the in-game overlay version and MelonLoader metadata consistent through `ModInfo.DisplayText`.
-- For copy requests, always try the built-DLL copy immediately. Copy directly to the game `Mods` folder without first checking whether the game is running; if the DLL is locked, let the copy fail and report that.
+- After a successful build, always try the built-DLL copy immediately. Copy directly to the game `Mods` folder without first checking whether the game is running; if the DLL is locked, let the copy fail and report that.
+- When the user says to "merge" completed work, treat that as commit locally and push the current branch unless they explicitly limit it to local-only.
 - Keep feature ports modular. Each QoL port or gameplay change should ideally live in its own source file under a clear folder, with only small shared helpers in `GameData` or similar common areas.
 - Do not add loose config files for player-facing balance options. Balance-affecting features should be controlled through the in-game VP options menu, with shared option state living behind a typed helper in `GameData`.
 - Keep QoL changes always enabled, while balance changes default to improved/on and can be toggled individually back to vanilla in-game.
@@ -16,6 +17,8 @@
 - For development work, truth-seek against the available game disassembly before guessing how UAD works. The workspace has both skeleton/diffable and fuller IL views available at `E:\Codex\cpp2il_uad_diffable` and `E:\Codex\cpp2il_uad_isil`; inspect the relevant game classes/methods there when behavior or signatures are uncertain.
 - Be performance-conscious by default. One of VP's goals is to avoid TAF/DIP-style overhead, so watch for hot paths, broad polling, expensive UI rebuilds, repeated reflection, allocations in frequent hooks, and large data scans. Push back when a requested idea is likely to hurt performance, and prefer designs that cache, narrow scope, or hook less frequently.
 - Be liberal with temporary logs and timings when debugging. UAD behavior is often unclear from source alone and reruns are expensive, so optimize for enough upfront evidence to diagnose from `Latest.log`. Keep debug output clearly prefixed/scoped so it can be removed or gated later.
+- When a player-visible rough edge is accepted as "good enough for now", document it in `README.md` under Known Issues so future sessions do not rediscover it from scratch.
+- For campaign UI text patches, assume vanilla may rewrite labels through multiple paths after the obvious `CampaignCountryInfoUI.Refresh` call. Prefer native getter postfixes or final-pass repair hooks over one-shot text writes, and keep any watchdog narrow, cached, and visible-instance scoped.
 
 ## Build
 
@@ -62,5 +65,6 @@ Copy-Item -LiteralPath 'E:\Codex\UADVanillaPlus\UADVanillaPlus\bin\Release\net6.
 - `ModInfo.cs` is the single source of truth for mod identity, SemVer, and displayed version text. Do not duplicate version strings in patches.
 - `Harmony/` owns behavior changes implemented through Harmony patches. Each feature should get its own patch file named after the game surface it changes, such as `CampaignFleetWindowDesignViewerPatch.cs`.
 - `GameData/` owns small read/query helpers around UAD campaign objects. Keep these helpers generic and side-effect free so multiple feature patches can share them safely.
+- Campaign country-info additions are currently split between native text producers and final repair hooks because some vanilla tab/popup paths repaint labels after normal refresh. The known remaining issue is that campaign maintenance indicators may not appear on first campaign load until a campaign tab switch.
 - Future folders should follow responsibility, not chronology. For example, put reusable UI construction helpers under `Ui/`, data import/export helpers under `Data/`, and ship/designer calculations under `ShipDesign/` if those areas become real modules.
 - Feature patches should explain their intent in comments near the class or non-obvious methods: what behavior changes, why VP wants it, and what vanilla behavior is being protected.

@@ -2,7 +2,7 @@
 
 UAD Vanilla Plus (`UAD:VP`) is a lightweight mod for Ultimate Admiral: Dreadnoughts that keeps the base game feel while adding small quality-of-life improvements.
 
-Current version: `0.1.52`
+Current version: `0.1.56`
 
 ## Philosophy
 
@@ -42,6 +42,7 @@ Start the game normally after copying the DLL. If the mod loads, `UAD:VP` and th
 **Balance:**
 
 - Port Strike balance: scales transport losses from undefended port strikes by attacker tonnage instead of allowing small raiders to destroy large transport groups.
+- Suspend Dock Overcapacity: automatically delays lower-priority repairs, builds, and refits when monthly dock work exceeds shipyard capacity; manual mode keeps vanilla overcapacity handling.
 
 ### Design
 

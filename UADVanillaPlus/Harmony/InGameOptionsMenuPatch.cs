@@ -28,12 +28,14 @@ internal static class InGameOptionsMenuPatch
     private const string DesignAccuracyPenaltiesOptionName = "UADVP_Option_DesignAccuracyPenalties";
     private const string PortStrikeOptionName = "UADVP_Option_PortStrike";
     private const string MajorShipTorpedoesOptionName = "UADVP_Option_MajorShipTorpedoes";
+    private const string ShipyardCapacityOptionName = "UADVP_Option_ShipyardCapacity";
 
     private static readonly Color Background = new(0f, 0f, 0f, 0.94f);
     private static readonly Color RowBackground = new(0.09f, 0.09f, 0.09f, 0.96f);
     private static readonly Color SelectedGold = new(0.58f, 0.44f, 0.2f, 0.95f);
     private static readonly Color SegmentIdle = new(0.28f, 0.27f, 0.2f, 0.9f);
     private static readonly Color SegmentDisabled = new(0.12f, 0.12f, 0.1f, 0.82f);
+    private static readonly System.Reflection.MethodInfo? RefreshFinancesWindow = AccessTools.Method(typeof(CampaignFinancesWindow), "Refresh");
 
     private static Button? launcherButton;
     private static Image? launcherImage;
@@ -288,6 +290,14 @@ internal static class InGameOptionsMenuPatch
                     true,
                     ("Balanced", ModSettings.PortStrikeBalanced, () => SetPortStrikeMode(true)),
                     ("Vanilla", !ModSettings.PortStrikeBalanced, () => SetPortStrikeMode(false)));
+                AddSegmentedOption(
+                    pane.transform,
+                    ShipyardCapacityOptionName,
+                    "Suspend Dock Overcapacity",
+                    "Automatic temporarily suspends lower-priority repairs, builds, and refits during the monthly advance when dock work exceeds shipyard capacity. Manual keeps vanilla behavior, where players must manage overcapacity themselves and the game applies its global over-capacity time penalty.",
+                    true,
+                    ("Automatic", ModSettings.ShipyardCapacityBalanced, () => SetShipyardCapacityMode(true)),
+                    ("Manual", !ModSettings.ShipyardCapacityBalanced, () => SetShipyardCapacityMode(false)));
                 break;
             case Section.ShipDesign:
                 AddSegmentedOption(
@@ -443,6 +453,54 @@ internal static class InGameOptionsMenuPatch
         RefreshLauncherButton();
     }
 
+    private static void SetShipyardCapacityMode(bool balanced)
+    {
+        if (ModSettings.ShipyardCapacityBalanced != balanced)
+        {
+            ModSettings.ShipyardCapacityBalanced = balanced;
+            RefreshCampaignCostUi();
+        }
+
+        RefreshMenu();
+        RefreshLauncherButton();
+    }
+
+    private static void RefreshCampaignCostUi()
+    {
+        try
+        {
+            Ui? ui = G.ui;
+            if (ui == null || PlayerController.Instance == null || CampaignController.Instance?.CampaignData == null)
+                return;
+
+            try { ui.CountryInfo?.Refresh(); }
+            catch (Exception ex) { Melon<UADVanillaPlusMod>.Logger.Warning($"UADVP option: country-info cost refresh failed. {ex.GetType().Name}: {ex.Message}"); }
+
+            try
+            {
+                if (ui.FinancesWindow != null)
+                    RefreshFinancesWindow?.Invoke(ui.FinancesWindow, Array.Empty<object>());
+            }
+            catch (Exception ex) { Melon<UADVanillaPlusMod>.Logger.Warning($"UADVP option: finances cost refresh failed. {ex.GetType().Name}: {ex.Message}"); }
+
+            try { ui.FleetWindow?.Refresh(false); }
+            catch (Exception ex) { Melon<UADVanillaPlusMod>.Logger.Warning($"UADVP option: fleet cost refresh failed. {ex.GetType().Name}: {ex.Message}"); }
+
+            try { ui.SubmarineWindow?.Refresh(); }
+            catch (Exception ex) { Melon<UADVanillaPlusMod>.Logger.Warning($"UADVP option: submarine cost refresh failed. {ex.GetType().Name}: {ex.Message}"); }
+
+            try { ui.RefreshCampaignUI(); }
+            catch (Exception ex) { Melon<UADVanillaPlusMod>.Logger.Warning($"UADVP option: campaign UI refresh failed. {ex.GetType().Name}: {ex.Message}"); }
+
+            Melon<UADVanillaPlusMod>.Logger.Msg("UADVP option: refreshed campaign cost UI after Suspend Dock Overcapacity mode change.");
+        }
+        catch (Exception ex)
+        {
+            Melon<UADVanillaPlusMod>.Logger.Warning(
+                $"UADVP option: campaign cost UI refresh skipped. {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
     private static void RefreshMenu()
     {
         if (contentRoot == null)
@@ -470,12 +528,12 @@ internal static class InGameOptionsMenuPatch
     }
 
     private static bool AnyBalanceOptionEnabled()
-        => ModSettings.BattleWeatherAlwaysSunny || ModSettings.DesignAccuracyPenaltiesBalanced || ModSettings.PortStrikeBalanced || ModSettings.MajorShipTorpedoesRestricted;
+        => ModSettings.BattleWeatherAlwaysSunny || ModSettings.DesignAccuracyPenaltiesBalanced || ModSettings.PortStrikeBalanced || ModSettings.MajorShipTorpedoesRestricted || ModSettings.ShipyardCapacityBalanced;
 
     private static void AddLauncherTooltip(GameObject buttonObject)
         => AddTooltip(
             buttonObject,
-            $"UAD:VP Options\nBattle Weather: {BattleWeatherModeText(ModSettings.BattleWeatherAlwaysSunny)}\nAccuracy Penalties: {DesignAccuracyPenaltiesModeText(ModSettings.DesignAccuracyPenaltyMode)}\nPort Strike: {PortStrikeModeText(ModSettings.PortStrikeBalanced)}\nCA+ Torpedoes: {MajorShipTorpedoesModeText(ModSettings.MajorShipTorpedoesRestricted)}",
+            $"UAD:VP Options\nBattle Weather: {BattleWeatherModeText(ModSettings.BattleWeatherAlwaysSunny)}\nAccuracy Penalties: {DesignAccuracyPenaltiesModeText(ModSettings.DesignAccuracyPenaltyMode)}\nPort Strike: {PortStrikeModeText(ModSettings.PortStrikeBalanced)}\nSuspend Dock Overcapacity: {ShipyardCapacityModeText(ModSettings.ShipyardCapacityBalanced)}\nCA+ Torpedoes: {MajorShipTorpedoesModeText(ModSettings.MajorShipTorpedoesRestricted)}",
             () => launcherButton != null && launcherButton.interactable);
 
     private static void AddTooltip(GameObject target, string text, Func<bool>? canShow = null)
@@ -639,6 +697,9 @@ internal static class InGameOptionsMenuPatch
 
     private static string MajorShipTorpedoesModeText(bool restricted)
         => restricted ? "Disallowed" : "Vanilla";
+
+    private static string ShipyardCapacityModeText(bool balanced)
+        => balanced ? "Automatic" : "Manual";
 
     private static void SetMenuButtonText(GameObject buttonObject, string text)
     {

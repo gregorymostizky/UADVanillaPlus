@@ -12,11 +12,13 @@ internal static class ModSettings
     private const string BattleWeatherAlwaysSunnyKey = "uadvp_battle_weather_always_sunny";
     private const string DesignAccuracyPenaltyModeKey = "uadvp_design_accuracy_penalty_mode";
     private const string MajorShipTorpedoesRestrictedKey = "uadvp_major_ship_torpedoes_restricted";
+    private const string ShipyardCapacityBalancedKey = "uadvp_shipyard_capacity_balanced";
 
     private static bool? portStrikeBalanced;
     private static bool? battleWeatherAlwaysSunny;
     private static AccuracyPenaltyMode? designAccuracyPenaltyMode;
     private static bool? majorShipTorpedoesRestricted;
+    private static bool? shipyardCapacityBalanced;
 
     internal enum AccuracyPenaltyMode
     {
@@ -78,6 +80,18 @@ internal static class ModSettings
             PlayerPrefs.SetInt(MajorShipTorpedoesRestrictedKey, value ? 1 : 0);
             PlayerPrefs.Save();
             Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP option: CA+ Torpedoes mode {(value ? "Disallowed" : "Vanilla")}.");
+        }
+    }
+
+    internal static bool ShipyardCapacityBalanced
+    {
+        get => shipyardCapacityBalanced ??= PlayerPrefs.GetInt(ShipyardCapacityBalancedKey, 1) != 0;
+        set
+        {
+            shipyardCapacityBalanced = value;
+            PlayerPrefs.SetInt(ShipyardCapacityBalancedKey, value ? 1 : 0);
+            PlayerPrefs.Save();
+            Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP option: Suspend Dock Overcapacity mode {(value ? "Automatic" : "Manual")}.");
         }
     }
 
