@@ -19,6 +19,7 @@ internal static class InGameOptionsMenuPatch
         Battle,
         Campaign,
         ShipDesign,
+        Experimental,
     }
 
     private const string ButtonName = "UADVP_OptionsButton";
@@ -29,6 +30,7 @@ internal static class InGameOptionsMenuPatch
     private const string PortStrikeOptionName = "UADVP_Option_PortStrike";
     private const string MajorShipTorpedoesOptionName = "UADVP_Option_MajorShipTorpedoes";
     private const string ShipyardCapacityOptionName = "UADVP_Option_ShipyardCapacity";
+    private const string CampaignMapWraparoundOptionName = "UADVP_Option_CampaignMapWraparound";
 
     private static readonly Color Background = new(0f, 0f, 0f, 0.94f);
     private static readonly Color RowBackground = new(0.09f, 0.09f, 0.09f, 0.96f);
@@ -241,6 +243,7 @@ internal static class InGameOptionsMenuPatch
         AddSectionButton(sections.transform, Section.Battle, "Battle");
         AddSectionButton(sections.transform, Section.Campaign, "Campaign");
         AddSectionButton(sections.transform, Section.ShipDesign, "Ship Design");
+        AddSectionButton(sections.transform, Section.Experimental, "Experimental");
     }
 
     private static void BuildSectionPane(Transform parent)
@@ -308,6 +311,16 @@ internal static class InGameOptionsMenuPatch
                     true,
                     ("Disallowed", ModSettings.MajorShipTorpedoesRestricted, () => SetMajorShipTorpedoesMode(true)),
                     ("Vanilla", !ModSettings.MajorShipTorpedoesRestricted, () => SetMajorShipTorpedoesMode(false)));
+                break;
+            case Section.Experimental:
+                AddSegmentedOption(
+                    pane.transform,
+                    CampaignMapWraparoundOptionName,
+                    "Campaign Map Wrap",
+                    "Experimental visual wrap-around for the campaign map. It draws neighboring map copies beyond the Pacific edge and expands horizontal camera panning. Off keeps vanilla map bounds.",
+                    true,
+                    ("Enabled", ModSettings.CampaignMapWraparoundEnabled, () => SetCampaignMapWraparoundMode(true)),
+                    ("Off", !ModSettings.CampaignMapWraparoundEnabled, () => SetCampaignMapWraparoundMode(false)));
                 break;
         }
     }
@@ -465,6 +478,18 @@ internal static class InGameOptionsMenuPatch
         RefreshLauncherButton();
     }
 
+    private static void SetCampaignMapWraparoundMode(bool enabled)
+    {
+        if (ModSettings.CampaignMapWraparoundEnabled != enabled)
+        {
+            ModSettings.CampaignMapWraparoundEnabled = enabled;
+            CampaignMapWrapVisualPatch.ApplyCurrentSetting();
+        }
+
+        RefreshMenu();
+        RefreshLauncherButton();
+    }
+
     private static void RefreshCampaignCostUi()
     {
         try
@@ -528,12 +553,12 @@ internal static class InGameOptionsMenuPatch
     }
 
     private static bool AnyBalanceOptionEnabled()
-        => ModSettings.BattleWeatherAlwaysSunny || ModSettings.DesignAccuracyPenaltiesBalanced || ModSettings.PortStrikeBalanced || ModSettings.MajorShipTorpedoesRestricted || ModSettings.ShipyardCapacityBalanced;
+        => ModSettings.BattleWeatherAlwaysSunny || ModSettings.DesignAccuracyPenaltiesBalanced || ModSettings.PortStrikeBalanced || ModSettings.MajorShipTorpedoesRestricted || ModSettings.ShipyardCapacityBalanced || ModSettings.CampaignMapWraparoundEnabled;
 
     private static void AddLauncherTooltip(GameObject buttonObject)
         => AddTooltip(
             buttonObject,
-            $"UAD:VP Options\nBattle Weather: {BattleWeatherModeText(ModSettings.BattleWeatherAlwaysSunny)}\nAccuracy Penalties: {DesignAccuracyPenaltiesModeText(ModSettings.DesignAccuracyPenaltyMode)}\nPort Strike: {PortStrikeModeText(ModSettings.PortStrikeBalanced)}\nSuspend Dock Overcapacity: {ShipyardCapacityModeText(ModSettings.ShipyardCapacityBalanced)}\nCA+ Torpedoes: {MajorShipTorpedoesModeText(ModSettings.MajorShipTorpedoesRestricted)}",
+            $"UAD:VP Options\nBattle Weather: {BattleWeatherModeText(ModSettings.BattleWeatherAlwaysSunny)}\nAccuracy Penalties: {DesignAccuracyPenaltiesModeText(ModSettings.DesignAccuracyPenaltyMode)}\nPort Strike: {PortStrikeModeText(ModSettings.PortStrikeBalanced)}\nSuspend Dock Overcapacity: {ShipyardCapacityModeText(ModSettings.ShipyardCapacityBalanced)}\nCA+ Torpedoes: {MajorShipTorpedoesModeText(ModSettings.MajorShipTorpedoesRestricted)}\nCampaign Map Wrap: {CampaignMapWraparoundModeText(ModSettings.CampaignMapWraparoundEnabled)}",
             () => launcherButton != null && launcherButton.interactable);
 
     private static void AddTooltip(GameObject target, string text, Func<bool>? canShow = null)
@@ -683,6 +708,7 @@ internal static class InGameOptionsMenuPatch
             Section.Battle => "Battle",
             Section.Campaign => "Campaign",
             Section.ShipDesign => "Ship Design",
+            Section.Experimental => "Experimental",
             _ => "Options",
         };
 
@@ -700,6 +726,9 @@ internal static class InGameOptionsMenuPatch
 
     private static string ShipyardCapacityModeText(bool balanced)
         => balanced ? "Automatic" : "Manual";
+
+    private static string CampaignMapWraparoundModeText(bool enabled)
+        => enabled ? "Enabled" : "Off";
 
     private static void SetMenuButtonText(GameObject buttonObject, string text)
     {

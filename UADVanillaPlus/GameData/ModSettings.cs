@@ -13,12 +13,14 @@ internal static class ModSettings
     private const string DesignAccuracyPenaltyModeKey = "uadvp_design_accuracy_penalty_mode";
     private const string MajorShipTorpedoesRestrictedKey = "uadvp_major_ship_torpedoes_restricted";
     private const string ShipyardCapacityBalancedKey = "uadvp_shipyard_capacity_balanced";
+    private const string CampaignMapWraparoundEnabledKey = "uadvp_campaign_map_wraparound_enabled";
 
     private static bool? portStrikeBalanced;
     private static bool? battleWeatherAlwaysSunny;
     private static AccuracyPenaltyMode? designAccuracyPenaltyMode;
     private static bool? majorShipTorpedoesRestricted;
     private static bool? shipyardCapacityBalanced;
+    private static bool? campaignMapWraparoundEnabled;
 
     internal enum AccuracyPenaltyMode
     {
@@ -92,6 +94,18 @@ internal static class ModSettings
             PlayerPrefs.SetInt(ShipyardCapacityBalancedKey, value ? 1 : 0);
             PlayerPrefs.Save();
             Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP option: Suspend Dock Overcapacity mode {(value ? "Automatic" : "Manual")}.");
+        }
+    }
+
+    internal static bool CampaignMapWraparoundEnabled
+    {
+        get => campaignMapWraparoundEnabled ??= PlayerPrefs.GetInt(CampaignMapWraparoundEnabledKey, 0) != 0;
+        set
+        {
+            campaignMapWraparoundEnabled = value;
+            PlayerPrefs.SetInt(CampaignMapWraparoundEnabledKey, value ? 1 : 0);
+            PlayerPrefs.Save();
+            Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP option: Campaign Map Wrap {(value ? "Enabled" : "Off")}.");
         }
     }
 
