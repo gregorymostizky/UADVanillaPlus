@@ -41,6 +41,7 @@ internal static class ModSettings
             PlayerPrefs.SetInt(PortStrikeBalancedKey, value ? 1 : 0);
             PlayerPrefs.Save();
             Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP option: Port Strike mode {(value ? "Balanced" : "Vanilla")}.");
+            LogCurrentSettings("after Port Strike change");
         }
     }
 
@@ -53,6 +54,7 @@ internal static class ModSettings
             PlayerPrefs.SetInt(BattleWeatherAlwaysSunnyKey, value ? 1 : 0);
             PlayerPrefs.Save();
             Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP option: Battle Weather mode {(value ? "Always Sunny" : "Vanilla")}.");
+            LogCurrentSettings("after Battle Weather change");
         }
     }
 
@@ -71,6 +73,7 @@ internal static class ModSettings
             PlayerPrefs.SetInt(DesignAccuracyPenaltyModeKey, (int)value);
             PlayerPrefs.Save();
             Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP option: Design Accuracy Penalties mode {AccuracyPenaltyModeText(value)}.");
+            LogCurrentSettings("after Accuracy Penalties change");
             AccuracyPenaltyBalance.TryReapplyLoadedStats(value);
         }
     }
@@ -84,6 +87,7 @@ internal static class ModSettings
             PlayerPrefs.SetInt(MajorShipTorpedoesRestrictedKey, value ? 1 : 0);
             PlayerPrefs.Save();
             Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP option: CA+ Torpedoes mode {(value ? "Disallowed" : "Vanilla")}.");
+            LogCurrentSettings("after CA+ Torpedoes change");
         }
     }
 
@@ -96,6 +100,7 @@ internal static class ModSettings
             PlayerPrefs.SetInt(ObsoleteDesignRetentionEnabledKey, value ? 1 : 0);
             PlayerPrefs.Save();
             Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP option: Obsolete Tech & Hulls mode {(value ? "Retain" : "Vanilla")}.");
+            LogCurrentSettings("after Obsolete Tech & Hulls change");
         }
     }
 
@@ -108,6 +113,7 @@ internal static class ModSettings
             PlayerPrefs.SetInt(ShipyardCapacityBalancedKey, value ? 1 : 0);
             PlayerPrefs.Save();
             Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP option: Suspend Dock Overcapacity mode {(value ? "Automatic" : "Manual")}.");
+            LogCurrentSettings("after Suspend Dock Overcapacity change");
         }
     }
 
@@ -120,6 +126,7 @@ internal static class ModSettings
             PlayerPrefs.SetInt(CampaignMapWraparoundEnabledKey, value ? 1 : 0);
             PlayerPrefs.Save();
             Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP option: Map Geometry {(value ? "Disc World" : "Flat Earth")}.");
+            LogCurrentSettings("after Map Geometry change");
         }
     }
 
@@ -131,6 +138,38 @@ internal static class ModSettings
 
     internal static string AccuracyPenaltyModeText(AccuracyPenaltyMode mode)
         => mode == AccuracyPenaltyMode.Vanilla ? "Vanilla" : $"/{(int)mode}";
+
+    internal static void LogCurrentSettings(string context)
+    {
+        Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP settings ({context}): {CurrentSettingsText()}.");
+    }
+
+    private static string CurrentSettingsText()
+        => $"Battle Weather={BattleWeatherModeText(BattleWeatherAlwaysSunny)}; " +
+           $"Accuracy Penalties={AccuracyPenaltyModeText(DesignAccuracyPenaltyMode)}; " +
+           $"Port Strike={PortStrikeModeText(PortStrikeBalanced)}; " +
+           $"Suspend Dock Overcapacity={ShipyardCapacityModeText(ShipyardCapacityBalanced)}; " +
+           $"CA+ Torpedoes={MajorShipTorpedoesModeText(MajorShipTorpedoesRestricted)}; " +
+           $"Obsolete Tech & Hulls={ObsoleteDesignRetentionModeText(ObsoleteDesignRetentionEnabled)}; " +
+           $"Map Geometry={CampaignMapModeText(CampaignMapWraparoundEnabled)}";
+
+    internal static string BattleWeatherModeText(bool alwaysSunny)
+        => alwaysSunny ? "Always Sunny" : "Vanilla";
+
+    internal static string PortStrikeModeText(bool balanced)
+        => balanced ? "Balanced" : "Vanilla";
+
+    internal static string ShipyardCapacityModeText(bool balanced)
+        => balanced ? "Automatic" : "Manual";
+
+    internal static string MajorShipTorpedoesModeText(bool restricted)
+        => restricted ? "Disallowed" : "Vanilla";
+
+    internal static string ObsoleteDesignRetentionModeText(bool enabled)
+        => enabled ? "Retain" : "Vanilla";
+
+    internal static string CampaignMapModeText(bool enabled)
+        => enabled ? "Disc World" : "Flat Earth";
 
     private static AccuracyPenaltyMode LoadAccuracyPenaltyMode()
     {

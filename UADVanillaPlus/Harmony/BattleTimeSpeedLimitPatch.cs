@@ -9,7 +9,6 @@ internal static class BattleTimeSpeedLimitPatch
 {
     private const float MaxBattleTimeScale = 30f;
     private static int lastAutomaticTimeScaleSlowdown;
-    private static int lastLoggedAutomaticTimeScaleSlowdown = -1;
     private static int lastUserTimeScale = 1;
     private static bool ignoreNextAutomaticTimeScaleSlowdown;
     private static bool inCombatUpdateTimeSpeedLimit;
@@ -25,7 +24,6 @@ internal static class BattleTimeSpeedLimitPatch
             if (lastUserTimeScale > requestedScale && requestedScale != lastAutomaticTimeScaleSlowdown)
             {
                 lastAutomaticTimeScaleSlowdown = requestedScale;
-                LogAutomaticSlowdown(requestedScale);
 
                 if (ignoreNextAutomaticTimeScaleSlowdown)
                 {
@@ -36,9 +34,6 @@ internal static class BattleTimeSpeedLimitPatch
             }
             else
             {
-                if (ScaleToInt(scale) != lastUserTimeScale)
-                    Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP battle time: overriding automatic {requestedScale}x -> player {lastUserTimeScale}x.");
-
                 scale = lastUserTimeScale;
             }
 
@@ -88,7 +83,6 @@ internal static class BattleTimeSpeedLimitPatch
     private static void ResetBattleTimeState()
     {
         lastAutomaticTimeScaleSlowdown = 0;
-        lastLoggedAutomaticTimeScaleSlowdown = -1;
         lastUserTimeScale = 1;
         ignoreNextAutomaticTimeScaleSlowdown = false;
         inCombatUpdateTimeSpeedLimit = false;
@@ -97,13 +91,4 @@ internal static class BattleTimeSpeedLimitPatch
 
     private static int ScaleToInt(float scale)
         => (int)(scale + 0.1f);
-
-    private static void LogAutomaticSlowdown(int scale)
-    {
-        if (lastLoggedAutomaticTimeScaleSlowdown == scale)
-            return;
-
-        lastLoggedAutomaticTimeScaleSlowdown = scale;
-        Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP battle time: observed automatic slowdown to {scale}x.");
-    }
 }

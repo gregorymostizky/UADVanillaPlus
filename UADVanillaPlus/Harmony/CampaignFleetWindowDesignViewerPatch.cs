@@ -44,6 +44,7 @@ internal static class CampaignFleetWindowDesignViewerPatch
     private static Vector2? designHeaderOffsetMaxOriginal;
     private static bool refreshingDesignViewerList;
     private static bool suppressSortedPlayerDesignRefresh;
+    private static bool loggedRefitDesignNameCleanup;
 
     internal static Ship? SelectedViewedDesign { get; private set; }
 
@@ -513,13 +514,69 @@ internal static class CampaignFleetWindowDesignViewerPatch
         ui.ShipCount.text = $"{counts.Active}/{counts.BuildingDisplay}/{counts.Other}";
     }
 
-    private static void SetDeletedDesignRowText(FleetWindow_ShipElementUI ui, Ship design)
+    private static void SetDesignRowNameText(FleetWindow_ShipElementUI ui, Ship design)
     {
         if (ui?.Name == null || design == null)
             return;
 
+        ui.Name.fontStyle &= ~FontStyles.Italic;
+
+        string name = DesignRowDisplayName(design);
+        ui.Name.text = design.isErased ? $"<color=#8F2F2F><s>{EscapeTextMeshProRichText(name)}</s></color>" : name;
+    }
+
+    private static string DesignRowDisplayName(Ship design)
+    {
         string name = design.Name(false, false, false, false, true);
-        ui.Name.text = design.isErased ? $"(deleted) {name}" : name;
+        if (design.isRefitDesign)
+        {
+            name = StripRefitDesignCloneSuffix(name);
+            LogRefitDesignNameCleanupOnce();
+        }
+
+        return name;
+    }
+
+    private static string StripRefitDesignCloneSuffix(string name)
+    {
+        if (string.IsNullOrEmpty(name))
+            return string.Empty;
+
+        int end = name.Length - 1;
+        while (end >= 0 && char.IsWhiteSpace(name[end]))
+            end--;
+
+        int digitEnd = end;
+        while (end >= 0 && char.IsDigit(name[end]))
+            end--;
+
+        if (end == digitEnd)
+            return name;
+
+        while (end >= 0 && char.IsWhiteSpace(name[end]))
+            end--;
+
+        if (end <= 0 || name[end] != '-' || !char.IsWhiteSpace(name[end - 1]))
+            return name;
+
+        return name.Substring(0, end).TrimEnd();
+    }
+
+    private static void LogRefitDesignNameCleanupOnce()
+    {
+        if (loggedRefitDesignNameCleanup)
+            return;
+
+        loggedRefitDesignNameCleanup = true;
+        Melon<UADVanillaPlusMod>.Logger.Msg("Design viewer: normalized refit design row names.");
+    }
+
+    private static string EscapeTextMeshProRichText(string text)
+    {
+        return (text ?? string.Empty)
+            .Replace("&", "&amp;")
+            .Replace("<", "&lt;")
+            .Replace(">", "&gt;");
     }
 
     private static void AddShipStateToCounts(Ship ship, ref DesignShipCounts counts)
@@ -1108,7 +1165,7 @@ internal static class CampaignFleetWindowDesignViewerPatch
                 ui.CurrentShip = ship;
                 Player designPlayer = GetCurrentDesignViewerPlayer();
                 SetDesignShipCountText(ui, designPlayer, ship);
-                SetDeletedDesignRowText(ui, ship);
+                SetDesignRowNameText(ui, ship);
 
                 if (ui.Year != null)
                     ui.Year.text = $"{ShipDesignYear(ship)}";

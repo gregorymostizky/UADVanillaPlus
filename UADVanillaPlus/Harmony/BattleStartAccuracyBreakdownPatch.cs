@@ -1,4 +1,3 @@
-using System.Text;
 using HarmonyLib;
 using Il2Cpp;
 using MelonLoader;
@@ -34,106 +33,128 @@ internal static class BattleStartAccuracyBreakdownPatch
 
     private static void LogBattleSide(string side, Il2CppSystem.Collections.Generic.List<Ship>? ships)
     {
-        int count = ships?.Count ?? 0;
-        Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP battle-start accuracy: side={side}, ships={count}.");
-
+        AccuracySideSummary summary = new(side);
         if (ships == null)
+        {
+            Melon<UADVanillaPlusMod>.Logger.Msg(summary.Format());
             return;
+        }
 
         foreach (Ship ship in ships)
         {
-            if (ship == null)
-                continue;
-
-            LogShip(side, ship);
+            if (ship != null)
+                summary.Add(ship);
         }
+
+        Melon<UADVanillaPlusMod>.Logger.Msg(summary.Format());
     }
 
-    private static void LogShip(string side, Ship ship)
+    private sealed class AccuracySideSummary
     {
-        StringBuilder line = new();
-        line.Append("UADVP battle-start accuracy: ");
-        line.Append("side=");
-        line.Append(side);
-        line.Append(" | ");
-        line.Append(SafePlayerName(ship));
-        line.Append(" | ");
-        line.Append(SafeShipType(ship));
-        line.Append(" ");
-        line.Append(SafeShipName(ship));
-        line.Append(" | base=");
-        float accuracy = SafeStat(ship, "accuracy");
-        float accuracyLong = SafeStat(ship, "accuracy_long");
-        float accuracyEffect = SafeStatEffect(ship, "accuracy");
-        float accuracyLongEffect = SafeStatEffect(ship, "accuracy_long");
-        float accuracyWavesEffect = SafeStatEffect(ship, "accuracy_waves");
+        private readonly string side;
+        private readonly EffectRange accuracy = new();
+        private readonly EffectRange accuracyLong = new();
+        private readonly EffectRange accuracyWaves = new();
+        private readonly EffectRange accuracyCruise = new();
+        private int shipCount;
+        private int towerCount;
+        private int funnelCount;
+        private float accuracySum;
+        private float accuracyLongSum;
+        private float accuracyWavesSum;
+        private float accuracyCruiseSum;
+        private float stabilitySum;
+        private float beamSum;
+        private float draughtSum;
+        private float overweightSum;
 
-        line.Append(FormatPercentFromOne(accuracy));
-        line.Append(" raw=");
-        line.Append(FormatFloat(accuracy));
-        line.Append(" long=");
-        line.Append(FormatPercentFromOne(accuracyLong));
-        line.Append(" raw=");
-        line.Append(FormatFloat(accuracyLong));
-        line.Append(" accEffect=");
-        line.Append(FormatPercentFromOne(accuracyEffect));
-        line.Append(" raw=");
-        line.Append(FormatFloat(accuracyEffect));
-        line.Append(" longEffect=");
-        line.Append(FormatPercentFromOne(accuracyLongEffect));
-        line.Append(" raw=");
-        line.Append(FormatFloat(accuracyLongEffect));
-        line.Append(" wavesEffect=");
-        line.Append(FormatPercentFromOne(accuracyWavesEffect));
-        line.Append(" raw=");
-        line.Append(FormatFloat(accuracyWavesEffect));
-        line.Append(" | stability=");
-        line.Append(FormatFloat(SafeStat(ship, "stability")));
-        line.Append(" beam=");
-        line.Append(FormatFloat(SafeStat(ship, "beam")));
-        line.Append(" draught=");
-        line.Append(FormatFloat(SafeStat(ship, "draught")));
-        line.Append(" overweight=");
-        line.Append(FormatFloat(SafeStat(ship, "overweight")));
-        line.Append(" pitch=");
-        line.Append(FormatFloat(SafeStat(ship, "pitch")));
-        line.Append(" roll=");
-        line.Append(FormatFloat(SafeStat(ship, "roll")));
-        line.Append(" | mainGun=");
-        line.Append(FormatMainGun(ship));
+        internal AccuracySideSummary(string side)
+        {
+            this.side = side;
+        }
 
-        Melon<UADVanillaPlusMod>.Logger.Msg(line.ToString());
-        LogSplit(side, ship, "accuracy");
-        LogSplit(side, ship, "accuracy_long");
-        LogSplit(side, ship, "accuracy_waves");
-        LogSplit(side, ship, "accuracy_cruise");
-        LogAccuracyParts(side, ship);
+        internal void Add(Ship ship)
+        {
+            shipCount++;
+            string shipLabel = SafeShipLabel(ship);
+
+            AddEffect(accuracy, ref accuracySum, SafeStatEffect(ship, "accuracy"), shipLabel);
+            AddEffect(accuracyLong, ref accuracyLongSum, SafeStatEffect(ship, "accuracy_long"), shipLabel);
+            AddEffect(accuracyWaves, ref accuracyWavesSum, SafeStatEffect(ship, "accuracy_waves"), shipLabel);
+            AddEffect(accuracyCruise, ref accuracyCruiseSum, SafeStatEffect(ship, "accuracy_cruise"), shipLabel);
+
+            stabilitySum += SafeStat(ship, "stability");
+            beamSum += SafeStat(ship, "beam");
+            draughtSum += SafeStat(ship, "draught");
+            overweightSum += SafeStat(ship, "overweight");
+
+            CountAccuracyParts(ship, out int towers, out int funnels);
+            towerCount += towers;
+            funnelCount += funnels;
+        }
+
+        internal string Format()
+        {
+            if (shipCount == 0)
+                return $"UADVP battle-start accuracy summary: side={side}, ships=0.";
+
+            return $"UADVP battle-start accuracy summary: side={side}, ships={shipCount}; " +
+                $"accuracy avg={FormatPercentFromOne(Average(accuracySum))} worst={accuracy.MinText()} best={accuracy.MaxText()}; " +
+                $"long avg={FormatPercentFromOne(Average(accuracyLongSum))}; " +
+                $"waves avg={FormatPercentFromOne(Average(accuracyWavesSum))} peak={accuracyWaves.MaxText()}; " +
+                $"cruise avg={FormatPercentFromOne(Average(accuracyCruiseSum))} worst={accuracyCruise.MinText()}; " +
+                $"hull avg stability={FormatFloat(Average(stabilitySum))}, beam={FormatFloat(Average(beamSum))}, draught={FormatFloat(Average(draughtSum))}, overweight={FormatFloat(Average(overweightSum))}; " +
+                $"avg towers={FormatFloat((float)towerCount / shipCount)}, funnels={FormatFloat((float)funnelCount / shipCount)}.";
+        }
+
+        private void AddEffect(EffectRange range, ref float sum, float value, string shipLabel)
+        {
+            sum += value;
+            range.Add(value, shipLabel);
+        }
+
+        private float Average(float sum)
+            => sum / shipCount;
     }
 
-    private static string FormatMainGun(Ship ship)
+    private sealed class EffectRange
     {
-        try
-        {
-            PartData? gun = ship.mainGunsGroup;
-            if (gun == null)
-                return "<none>";
+        private bool hasValue;
+        private float min;
+        private float max;
+        private string minShip = string.Empty;
+        private string maxShip = string.Empty;
 
-            StringBuilder text = new();
-            text.Append(gun.nameUi ?? gun.name ?? "<gun>");
-            text.Append(" caliber=");
-            text.Append(FormatFloat(gun.caliber));
-            text.Append(" barrels=");
-            text.Append(gun.barrels);
-            text.Append(" grade=");
-            text.Append(SafeGunGrade(ship, gun));
-            text.Append(" turretAcc=");
-            text.Append(FormatPercentFromOne(SafeTurretAccuracy(ship, gun)));
-            return text.ToString();
-        }
-        catch (Exception ex)
+        internal void Add(float value, string shipLabel)
         {
-            return $"<failed:{ex.GetType().Name}>";
+            if (!hasValue)
+            {
+                hasValue = true;
+                min = value;
+                max = value;
+                minShip = shipLabel;
+                maxShip = shipLabel;
+                return;
+            }
+
+            if (value < min)
+            {
+                min = value;
+                minShip = shipLabel;
+            }
+
+            if (value > max)
+            {
+                max = value;
+                maxShip = shipLabel;
+            }
         }
+
+        internal string MinText()
+            => hasValue ? $"{FormatPercentFromOne(min)} {minShip}" : "n/a";
+
+        internal string MaxText()
+            => hasValue ? $"{FormatPercentFromOne(max)} {maxShip}" : "n/a";
     }
 
     private static float SafeStat(Ship ship, string stat)
@@ -163,58 +184,13 @@ internal static class BattleStartAccuracyBreakdownPatch
         }
     }
 
-    private static void LogSplit(string side, Ship ship, string effect)
+    private static void CountAccuracyParts(Ship ship, out int towerCount, out int funnelCount)
     {
+        towerCount = 0;
+        funnelCount = 0;
+
         try
         {
-            Il2CppSystem.Collections.Generic.Dictionary<string, float>? split = ship.StatEffectSplit(effect);
-            if (split == null || split.Count == 0)
-                return;
-
-            StringBuilder line = new();
-            line.Append("UADVP battle-start accuracy split: side=");
-            line.Append(side);
-            line.Append(" | ");
-            line.Append(SafePlayerName(ship));
-            line.Append(" | ");
-            line.Append(SafeShipType(ship));
-            line.Append(" ");
-            line.Append(SafeShipName(ship));
-            line.Append(" | ");
-            line.Append(effect);
-            line.Append(" = ");
-
-            bool first = true;
-            foreach (var entry in split)
-            {
-                if (!first)
-                    line.Append(", ");
-
-                first = false;
-                line.Append(entry.Key ?? "<null>");
-                line.Append(":");
-                line.Append(FormatPercentFromOne(entry.Value));
-                line.Append(" raw=");
-                line.Append(FormatFloat(entry.Value));
-            }
-
-            Melon<UADVanillaPlusMod>.Logger.Msg(line.ToString());
-        }
-        catch (Exception ex)
-        {
-            Melon<UADVanillaPlusMod>.Logger.Warning(
-                $"UADVP battle-start accuracy split failed for {effect} on {SafeShipName(ship)}. {ex.GetType().Name}: {ex.Message}");
-        }
-    }
-
-    private static void LogAccuracyParts(string side, Ship ship)
-    {
-        try
-        {
-            List<string> importantParts = new();
-            int funnelCount = 0;
-            int towerCount = 0;
-
             Il2CppSystem.Collections.Generic.List<Part>? parts = ship.parts;
             if (parts == null)
                 return;
@@ -229,90 +205,17 @@ internal static class BattleStartAccuracyBreakdownPatch
                     funnelCount++;
                 if (data.isTowerAny)
                     towerCount++;
-
-                // Diagnostic intent: identify the design choices behind the
-                // accuracy split without touching live combat hit-chance code.
-                if (!data.isHull && !data.isTowerAny && !data.isFunnel)
-                    continue;
-
-                importantParts.Add(FormatAccuracyPart(ship, data));
             }
-
-            Melon<UADVanillaPlusMod>.Logger.Msg(
-                $"UADVP battle-start accuracy parts: side={side} | {SafePlayerName(ship)} | {SafeShipType(ship)} {SafeShipName(ship)} | parts={parts.Count} towers={towerCount} funnels={funnelCount} | {string.Join("; ", importantParts)}");
-        }
-        catch (Exception ex)
-        {
-            Melon<UADVanillaPlusMod>.Logger.Warning(
-                $"UADVP battle-start accuracy parts failed on {SafeShipName(ship)}. {ex.GetType().Name}: {ex.Message}");
-        }
-    }
-
-    private static string FormatAccuracyPart(Ship ship, PartData data)
-    {
-        StringBuilder text = new();
-        text.Append(data.isHull ? "hull" : data.isTowerAny ? "tower" : data.isFunnel ? "funnel" : "part");
-        text.Append("=");
-        text.Append(SafePartName(data, ship));
-        AppendPartStat(text, data, "accuracy", "acc");
-        AppendPartStat(text, data, "accuracy_long", "long");
-        AppendPartStat(text, data, "smoke", "smoke");
-        AppendPartStat(text, data, "stability", "stab");
-        AppendPartStat(text, data, "beam", "beam");
-        AppendPartStat(text, data, "draught", "draught");
-        return text.ToString();
-    }
-
-    private static void AppendPartStat(StringBuilder text, PartData data, string stat, string label)
-    {
-        float value = SafePartStat(data, stat);
-        if (Math.Abs(value) < 0.0001f)
-            return;
-
-        text.Append(" ");
-        text.Append(label);
-        text.Append("=");
-        text.Append(FormatFloat(value));
-    }
-
-    private static float SafePartStat(PartData data, string stat)
-    {
-        try
-        {
-            if (G.GameData?.stats == null || data.statsx == null || !G.GameData.stats.TryGetValue(stat, out StatData statData))
-                return 0f;
-
-            return data.statsx.TryGetValue(statData, out float value) ? value : 0f;
         }
         catch
         {
-            return 0f;
+            towerCount = 0;
+            funnelCount = 0;
         }
     }
 
-    private static int SafeGunGrade(Ship ship, PartData gun)
-    {
-        try
-        {
-            return ship.TechGunGrade(gun, false);
-        }
-        catch
-        {
-            return 0;
-        }
-    }
-
-    private static float SafeTurretAccuracy(Ship ship, PartData gun)
-    {
-        try
-        {
-            return ship.TechTurretAccuracy(gun);
-        }
-        catch
-        {
-            return 1f;
-        }
-    }
+    private static string SafeShipLabel(Ship ship)
+        => $"{SafeShipType(ship)} {SafeShipName(ship)}";
 
     private static string SafeShipName(Ship ship)
     {
@@ -347,18 +250,6 @@ internal static class BattleStartAccuracyBreakdownPatch
         catch
         {
             return "?";
-        }
-    }
-
-    private static string SafePartName(PartData data, Ship ship)
-    {
-        try
-        {
-            return Part.Name(data, ship, true, false, false);
-        }
-        catch
-        {
-            return data.nameUi ?? data.name ?? "<part>";
         }
     }
 

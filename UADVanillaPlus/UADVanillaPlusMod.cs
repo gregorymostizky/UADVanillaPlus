@@ -2,6 +2,7 @@ using HarmonyLib;
 using Il2Cpp;
 using MelonLoader;
 using UnityEngine;
+using UADVanillaPlus.GameData;
 
 [assembly: MelonGame("Game Labs", "Ultimate Admiral Dreadnoughts")]
 [assembly: MelonInfo(typeof(UADVanillaPlus.UADVanillaPlusMod), UADVanillaPlus.ModInfo.ShortName, UADVanillaPlus.ModInfo.MelonVersion, "GG")]
@@ -27,6 +28,7 @@ public sealed class UADVanillaPlusMod : MelonMod
         }
 
         LoggerInstance.Msg($"{ModInfo.DisplayText} initialized.");
+        ModSettings.LogCurrentSettings("startup");
     }
 
     public override void OnLateInitializeMelon()
