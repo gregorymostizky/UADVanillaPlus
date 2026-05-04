@@ -7,6 +7,8 @@
 - Keep the in-game overlay version and MelonLoader metadata consistent through `ModInfo.DisplayText`.
 - After a successful build, always try the built-DLL copy immediately. Copy directly to the game `Mods` folder without first checking whether the game is running; if the DLL is locked, let the copy fail and report that.
 - When the user asks to merge, push, update GitHub, or otherwise publish completed work, commit locally, fast-forward/merge the work to `master`, and push `master` unless they explicitly limit it to local-only or ask for a different branch.
+- The GitHub CLI is installed at `E:\Codex\tools\gh\gh_2.92.0_windows_amd64\bin\gh.exe`; use that full path when `gh` is not on `PATH`.
+- When creating or updating GitHub release notes, summarize the major player-facing highlights since the previous public release/tag, not only the final commit. Use the tag range, such as `previous_tag..new_tag`, and group the notes by user-facing area when helpful.
 - Do not stop at a feature branch or PR branch for normal completed work. Use feature branches only as temporary work branches or when the user explicitly asks for a PR-style flow.
 - Keep feature ports modular. Each QoL port or gameplay change should ideally live in its own source file under a clear folder, with only small shared helpers in `GameData` or similar common areas.
 - Do not add loose config files for player-facing balance options. Balance-affecting features should be controlled through the in-game VP options menu, with shared option state living behind a typed helper in `GameData`.
@@ -15,6 +17,7 @@
 - Prefer VP names for new UI objects and logs, such as `UADVP_...`, rather than carrying over `TAF_...` names.
 - Update `README.md` when adding major player-facing features, installation changes, or source-build workflow changes. Keep README consumer-friendly: describe the main feature value, not every implementation detail or internal versioning rule.
 - Order README feature bullets by user value/impact within each subsection, not by implementation chronology. Use judgment: frequently checked, high-friction, or high-consequence gameplay improvements should appear before smaller conveniences.
+- In README feature lists, bold the feature name before the colon, such as `**Campaign maintenance indicators**: ...`.
 - Never commit or push to `master` unless the user asks for a commit, push, merge, or GitHub update. Once they do, `master` is the default target in this repo.
 - For development work, truth-seek against the available game disassembly before guessing how UAD works. The workspace has both skeleton/diffable and fuller IL views available at `E:\Codex\cpp2il_uad_diffable` and `E:\Codex\cpp2il_uad_isil`; inspect the relevant game classes/methods there when behavior or signatures are uncertain.
 - Before adding Harmony diagnostics to Il2Cpp methods with unusual signatures, verify the exact decompiled signature and likely marshaling behavior up front. Be especially careful around `ref`/`out` parameters, value-type structs, Il2Cpp collection fields, nested generic types, and UI hot paths; prefer safer surrounding hooks or read-only postfixes when the direct hook shape is uncertain.

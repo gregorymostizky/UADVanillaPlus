@@ -32,48 +32,48 @@ Start the game normally after copying the DLL. If the mod loads, `UAD:VP` and th
 
 **QoL:**
 
-- <u>Campaign maintenance indicators</u>: show dock expansion status and transport capacity directly in the campaign country info panel.
-- <u>Task force return shortcut</u>: add a `Return to <origin port>` button to task-force popups for one-click orders back to port.
-- <u>Campaign battle auto-resolve odds</u>: show the player's vanilla auto-resolve win chance in the battle popup.
-- <u>Campaign map port ship counts</u>: darken and bold ports with player or AI vessels, lightly mute empty ports, and show counts beside occupied port names on the world map.
-- <u>Campaign active fleet port count</u>: show how many active vessels are currently in port.
-- <u>Campaign construction summaries</u>: split own builds, foreign contracts, and commissioning ships in the existing build counts.
-- <u>Campaign technology indicator</u>: show a compact estimate for the next expected research discovery.
-- <u>Direct diplomacy politics actions</u>: add Declare War and Force Peace buttons with confirmation to campaign politics rows, with Force Peace using the vanilla reparation flow when war victory points produce a clear winner.
-- <u>In-game options menu</u>: control UAD:VP balance options from the top-right game UI.
+- **Campaign maintenance indicators**: show dock expansion status and transport capacity directly in the campaign country info panel.
+- **Task force return shortcut**: add a `Return to <origin port>` button to task-force popups for one-click orders back to port.
+- **Campaign battle auto-resolve odds**: show the player's vanilla auto-resolve win chance in the battle popup.
+- **Campaign map port ship counts**: darken and bold ports with player or AI vessels, lightly mute empty ports, and show counts beside occupied port names on the world map.
+- **Campaign active fleet port count**: show how many active vessels are currently in port.
+- **Campaign construction summaries**: split own builds, foreign contracts, and commissioning ships in the existing build counts.
+- **Campaign technology indicator**: show a compact estimate for the next expected research discovery.
+- **Direct diplomacy politics actions**: add Declare War and Force Peace buttons with confirmation to campaign politics rows, with Force Peace using the vanilla reparation flow when war victory points produce a clear winner.
+- **In-game options menu**: control UAD:VP balance options from the top-right game UI.
 
 **Balance:**
 
-- <u>Port Strike balance</u>: scales transport losses from undefended port strikes by attacker tonnage instead of allowing small raiders to destroy large transport groups.
-- <u>Suspend Dock Overcapacity</u>: automatically delays lower-priority repairs, builds, and refits when monthly dock work exceeds shipyard capacity; manual mode keeps vanilla overcapacity handling.
+- **Port Strike balance**: scales transport losses from undefended port strikes by attacker tonnage instead of allowing small raiders to destroy large transport groups.
+- **Suspend Dock Overcapacity**: automatically delays lower-priority repairs, builds, and refits when monthly dock work exceeds shipyard capacity; manual mode keeps vanilla overcapacity handling.
 
 ### Design
 
 **QoL:**
 
-- <u>Design ship counts</u>: show active, building, and unavailable ships for each design.
-- <u>Designs tab country viewer</u>: browse major AI nations' ship designs from the campaign Designs tab.
-- <u>British late-hull tower availability</u>: correct missing campaign compatibility between the Battlecruiser VI, G3, and N3 hull families and their matching late British main and secondary towers.
+- **Design ship counts**: show active, building, and unavailable ships for each design.
+- **Designs tab country viewer**: browse major AI nations' ship designs from the campaign Designs tab.
+- **British late-hull tower availability**: correct missing campaign compatibility between the Battlecruiser VI, G3, and N3 hull families and their matching late British main and secondary towers.
 
 **Balance:**
 
-- <u>CA+ torpedo restriction</u>: optionally disallow torpedo launchers on heavy cruisers, battlecruisers, and battleships.
-- <u>Obsolete tech and hull retention</u>: optional player-only setting to keep already researched obsolete hulls and components available in ship design while AI design availability stays vanilla. This defaults to vanilla.
+- **CA+ torpedo restriction**: optionally disallow torpedo launchers on heavy cruisers, battlecruisers, and battleships.
+- **Obsolete tech and hull retention**: optional player-only setting to keep already researched obsolete hulls and components available in ship design while AI design availability stays vanilla. This defaults to vanilla.
 
 ### Battle
 
 **QoL:**
 
-- <u>Battle speed quality-of-life</u>: keep the player's selected battle speed available when the game tries to slow simulation speed near enemies.
+- **Battle speed quality-of-life**: keep the player's selected battle speed available when the game tries to slow simulation speed near enemies.
 
 **Balance:**
 
-- <u>Accuracy penalty balance</u>: lets players reduce extreme smoke, stability, and instability accuracy penalties from ship design.
-- <u>Battle weather balance</u>: optionally force daytime fair-weather battles instead of random time and bad-weather rolls.
+- **Accuracy penalty balance**: lets players reduce extreme smoke, stability, and instability accuracy penalties from ship design.
+- **Battle weather balance**: optionally force daytime fair-weather battles instead of random time and bad-weather rolls.
 
 ### Experimental
 
-- <u>Map Geometry</u>: optional `Disc World` seamless visual wrap-around for the campaign map at the Pacific edge, including clickable port/task-force/mission marker copies, wrapped task-force route visuals, and wrapped-map movement clicks/destinations. The `Flat Earth` setting keeps vanilla map geometry and remains the default.
+- **Map Geometry**: optional `Disc World` seamless visual wrap-around for the campaign map at the Pacific edge, including clickable port/task-force/mission marker copies, wrapped task-force route visuals, and wrapped-map movement clicks/destinations. The `Flat Earth` setting keeps vanilla map geometry and remains the default.
 
 ## Known Issues
 
@@ -105,6 +105,14 @@ To build and copy directly into the game's `Mods` folder:
 ```powershell
 dotnet build .\UADVanillaPlus.sln -c Release /p:DeployOnBuild=true
 ```
+
+## Borrowing Code
+
+Other Ultimate Admiral: Dreadnoughts modders are welcome to borrow, adapt, or learn from this code for their own mods. Credit is appreciated when copying larger pieces, but the main goal is to make useful modding patterns easier to share.
+
+## Modding Notes
+
+Features are split into focused Harmony patches where possible so individual ideas can be traced without importing the whole mod. If a small helper or patch saves you time in another project, feel free to use it.
 
 ## Thanks
 
