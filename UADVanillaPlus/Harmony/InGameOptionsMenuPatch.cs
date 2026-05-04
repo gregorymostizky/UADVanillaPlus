@@ -29,6 +29,7 @@ internal static class InGameOptionsMenuPatch
     private const string DesignAccuracyPenaltiesOptionName = "UADVP_Option_DesignAccuracyPenalties";
     private const string PortStrikeOptionName = "UADVP_Option_PortStrike";
     private const string MajorShipTorpedoesOptionName = "UADVP_Option_MajorShipTorpedoes";
+    private const string ObsoleteDesignRetentionOptionName = "UADVP_Option_ObsoleteDesignRetention";
     private const string ShipyardCapacityOptionName = "UADVP_Option_ShipyardCapacity";
     private const string CampaignMapWraparoundOptionName = "UADVP_Option_CampaignMapWraparound";
 
@@ -38,6 +39,7 @@ internal static class InGameOptionsMenuPatch
     private static readonly Color SegmentIdle = new(0.28f, 0.27f, 0.2f, 0.9f);
     private static readonly Color SegmentDisabled = new(0.12f, 0.12f, 0.1f, 0.82f);
     private static readonly System.Reflection.MethodInfo? RefreshFinancesWindow = AccessTools.Method(typeof(CampaignFinancesWindow), "Refresh");
+    private static readonly System.Reflection.MethodInfo? RefreshConstructorParts = AccessTools.Method(typeof(Ui), "RefreshParts");
 
     private static Button? launcherButton;
     private static Image? launcherImage;
@@ -311,6 +313,14 @@ internal static class InGameOptionsMenuPatch
                     true,
                     ("Disallowed", ModSettings.MajorShipTorpedoesRestricted, () => SetMajorShipTorpedoesMode(true)),
                     ("Vanilla", !ModSettings.MajorShipTorpedoesRestricted, () => SetMajorShipTorpedoesMode(false)));
+                AddSegmentedOption(
+                    pane.transform,
+                    ObsoleteDesignRetentionOptionName,
+                    "Obsolete Tech & Hulls",
+                    "Retain keeps already researched obsolete hulls and components available for player ship designs. Vanilla hides older options as newer equivalents become available. AI design availability remains vanilla.",
+                    true,
+                    ("Retain", ModSettings.ObsoleteDesignRetentionEnabled, () => SetObsoleteDesignRetentionMode(true)),
+                    ("Vanilla", !ModSettings.ObsoleteDesignRetentionEnabled, () => SetObsoleteDesignRetentionMode(false)));
                 break;
             case Section.Experimental:
                 AddSegmentedOption(
@@ -466,6 +476,18 @@ internal static class InGameOptionsMenuPatch
         RefreshLauncherButton();
     }
 
+    private static void SetObsoleteDesignRetentionMode(bool enabled)
+    {
+        if (ModSettings.ObsoleteDesignRetentionEnabled != enabled)
+        {
+            ModSettings.ObsoleteDesignRetentionEnabled = enabled;
+            RefreshConstructorAvailabilityUi();
+        }
+
+        RefreshMenu();
+        RefreshLauncherButton();
+    }
+
     private static void SetShipyardCapacityMode(bool balanced)
     {
         if (ModSettings.ShipyardCapacityBalanced != balanced)
@@ -488,6 +510,29 @@ internal static class InGameOptionsMenuPatch
 
         RefreshMenu();
         RefreshLauncherButton();
+    }
+
+    private static void RefreshConstructorAvailabilityUi()
+    {
+        try
+        {
+            Ui? ui = G.ui;
+            if (ui == null || PlayerController.Instance == null)
+                return;
+
+            try { ui.RefreshConstructorInfo(); }
+            catch (Exception ex) { Melon<UADVanillaPlusMod>.Logger.Warning($"UADVP option: constructor info refresh failed. {ex.GetType().Name}: {ex.Message}"); }
+
+            try { RefreshConstructorParts?.Invoke(ui, Array.Empty<object>()); }
+            catch (Exception ex) { Melon<UADVanillaPlusMod>.Logger.Warning($"UADVP option: constructor parts refresh failed. {ex.GetType().Name}: {ex.Message}"); }
+
+            Melon<UADVanillaPlusMod>.Logger.Msg("UADVP option: refreshed constructor availability UI after Obsolete Tech & Hulls mode change.");
+        }
+        catch (Exception ex)
+        {
+            Melon<UADVanillaPlusMod>.Logger.Warning(
+                $"UADVP option: constructor availability refresh skipped. {ex.GetType().Name}: {ex.Message}");
+        }
     }
 
     private static void RefreshCampaignCostUi()
@@ -553,12 +598,12 @@ internal static class InGameOptionsMenuPatch
     }
 
     private static bool AnyBalanceOptionEnabled()
-        => ModSettings.BattleWeatherAlwaysSunny || ModSettings.DesignAccuracyPenaltiesBalanced || ModSettings.PortStrikeBalanced || ModSettings.MajorShipTorpedoesRestricted || ModSettings.ShipyardCapacityBalanced || ModSettings.CampaignMapWraparoundEnabled;
+        => ModSettings.BattleWeatherAlwaysSunny || ModSettings.DesignAccuracyPenaltiesBalanced || ModSettings.PortStrikeBalanced || ModSettings.MajorShipTorpedoesRestricted || ModSettings.ObsoleteDesignRetentionEnabled || ModSettings.ShipyardCapacityBalanced || ModSettings.CampaignMapWraparoundEnabled;
 
     private static void AddLauncherTooltip(GameObject buttonObject)
         => AddTooltip(
             buttonObject,
-            $"UAD:VP Options\nBattle Weather: {BattleWeatherModeText(ModSettings.BattleWeatherAlwaysSunny)}\nAccuracy Penalties: {DesignAccuracyPenaltiesModeText(ModSettings.DesignAccuracyPenaltyMode)}\nPort Strike: {PortStrikeModeText(ModSettings.PortStrikeBalanced)}\nSuspend Dock Overcapacity: {ShipyardCapacityModeText(ModSettings.ShipyardCapacityBalanced)}\nCA+ Torpedoes: {MajorShipTorpedoesModeText(ModSettings.MajorShipTorpedoesRestricted)}\nMap Geometry: {CampaignMapWraparoundModeText(ModSettings.CampaignMapWraparoundEnabled)}",
+            $"UAD:VP Options\nBattle Weather: {BattleWeatherModeText(ModSettings.BattleWeatherAlwaysSunny)}\nAccuracy Penalties: {DesignAccuracyPenaltiesModeText(ModSettings.DesignAccuracyPenaltyMode)}\nPort Strike: {PortStrikeModeText(ModSettings.PortStrikeBalanced)}\nSuspend Dock Overcapacity: {ShipyardCapacityModeText(ModSettings.ShipyardCapacityBalanced)}\nCA+ Torpedoes: {MajorShipTorpedoesModeText(ModSettings.MajorShipTorpedoesRestricted)}\nObsolete Tech & Hulls: {ObsoleteDesignRetentionModeText(ModSettings.ObsoleteDesignRetentionEnabled)}\nMap Geometry: {CampaignMapWraparoundModeText(ModSettings.CampaignMapWraparoundEnabled)}",
             () => launcherButton != null && launcherButton.interactable);
 
     private static void AddTooltip(GameObject target, string text, Func<bool>? canShow = null)
@@ -723,6 +768,9 @@ internal static class InGameOptionsMenuPatch
 
     private static string MajorShipTorpedoesModeText(bool restricted)
         => restricted ? "Disallowed" : "Vanilla";
+
+    private static string ObsoleteDesignRetentionModeText(bool enabled)
+        => enabled ? "Retain" : "Vanilla";
 
     private static string ShipyardCapacityModeText(bool balanced)
         => balanced ? "Automatic" : "Manual";

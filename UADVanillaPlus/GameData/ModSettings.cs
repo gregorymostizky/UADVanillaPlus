@@ -12,6 +12,7 @@ internal static class ModSettings
     private const string BattleWeatherAlwaysSunnyKey = "uadvp_battle_weather_always_sunny";
     private const string DesignAccuracyPenaltyModeKey = "uadvp_design_accuracy_penalty_mode";
     private const string MajorShipTorpedoesRestrictedKey = "uadvp_major_ship_torpedoes_restricted";
+    private const string ObsoleteDesignRetentionEnabledKey = "uadvp_obsolete_design_retention_enabled";
     private const string ShipyardCapacityBalancedKey = "uadvp_shipyard_capacity_balanced";
     private const string CampaignMapWraparoundEnabledKey = "uadvp_campaign_map_wraparound_enabled";
 
@@ -19,6 +20,7 @@ internal static class ModSettings
     private static bool? battleWeatherAlwaysSunny;
     private static AccuracyPenaltyMode? designAccuracyPenaltyMode;
     private static bool? majorShipTorpedoesRestricted;
+    private static bool? obsoleteDesignRetentionEnabled;
     private static bool? shipyardCapacityBalanced;
     private static bool? campaignMapWraparoundEnabled;
 
@@ -82,6 +84,18 @@ internal static class ModSettings
             PlayerPrefs.SetInt(MajorShipTorpedoesRestrictedKey, value ? 1 : 0);
             PlayerPrefs.Save();
             Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP option: CA+ Torpedoes mode {(value ? "Disallowed" : "Vanilla")}.");
+        }
+    }
+
+    internal static bool ObsoleteDesignRetentionEnabled
+    {
+        get => obsoleteDesignRetentionEnabled ??= PlayerPrefs.GetInt(ObsoleteDesignRetentionEnabledKey, 0) != 0;
+        set
+        {
+            obsoleteDesignRetentionEnabled = value;
+            PlayerPrefs.SetInt(ObsoleteDesignRetentionEnabledKey, value ? 1 : 0);
+            PlayerPrefs.Save();
+            Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP option: Obsolete Tech & Hulls mode {(value ? "Retain" : "Vanilla")}.");
         }
     }
 

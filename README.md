@@ -2,14 +2,14 @@
 
 UAD Vanilla Plus (`UAD:VP`) is a lightweight mod for Ultimate Admiral: Dreadnoughts that keeps the base game feel while adding small quality-of-life improvements.
 
-Current version: `0.2.20`
+Current version: `0.2.21`
 
 ## Philosophy
 
 - No performance degradation compared to vanilla.
 - No config files: installation should stay as simple as one DLL in the `Mods` folder.
 - Quality-of-life changes are always enabled.
-- Balance changes default to improved behavior and can be turned off individually from the in-game UAD:VP options menu.
+- Most balance changes default to improved behavior and can be turned off individually from the in-game UAD:VP options menu; sharper or experimental options may default to vanilla.
 - Balance changes are intended to make the game feel more fair: fewer extreme edge cases, fewer unrealistic exploits, and fewer outcomes where the player or AI gets punished by hidden or overly swingy mechanics.
 
 ## Installation
@@ -57,6 +57,7 @@ Start the game normally after copying the DLL. If the mod loads, `UAD:VP` and th
 **Balance:**
 
 - <u>CA+ torpedo restriction</u>: optionally disallow torpedo launchers on heavy cruisers, battlecruisers, and battleships.
+- <u>Obsolete tech and hull retention</u>: optional player-only setting to keep already researched obsolete hulls and components available in ship design while AI design availability stays vanilla. This defaults to vanilla.
 
 ### Battle
 
