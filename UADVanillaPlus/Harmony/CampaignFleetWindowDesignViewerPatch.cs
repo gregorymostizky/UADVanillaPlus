@@ -725,6 +725,21 @@ internal static class CampaignFleetWindowDesignViewerPatch
             window.DesignRefit.interactable = false;
     }
 
+    private static void DisableDesignSelectionActionsIfNothingSelected(CampaignFleetWindow window)
+    {
+        // Vanilla's design action listeners read selectedElements[0]. VP can
+        // rebuild the design list without a selected row, so keep selection-
+        // dependent buttons inactive until the player clicks a design row.
+        if (window?.selectedElements != null && window.selectedElements.Count > 0)
+            return;
+
+        if (window?.DesignView != null) window.DesignView.interactable = false;
+        if (window?.Delete != null) window.Delete.interactable = false;
+        if (window?.BuildShip != null) window.BuildShip.interactable = false;
+        if (window?.DesignRefit != null) window.DesignRefit.interactable = false;
+        if (window?.CancelSale != null) window.CancelSale.interactable = false;
+    }
+
     private static Ship? GetSelectedViewedDesign(CampaignFleetWindow window)
     {
         if (SelectedViewedDesign != null)
@@ -895,6 +910,7 @@ internal static class CampaignFleetWindowDesignViewerPatch
             SetForeignDesignButtonsInteractable(window, allowActions);
             RebuildDesignRefitButton(window, allowActions);
             InstallDesignDeleteButtonHandler(window, allowActions);
+            DisableDesignSelectionActionsIfNothingSelected(window);
             UpdateDesignViewerToolbar();
         }
         catch (Exception ex)
@@ -1103,6 +1119,9 @@ internal static class CampaignFleetWindowDesignViewerPatch
 
             if (isDesign && IsViewingForeignDesigns)
                 SetForeignDesignButtonsInteractable(__instance, false);
+
+            if (isDesign && !IsViewingForeignDesigns)
+                DisableDesignSelectionActionsIfNothingSelected(__instance);
         }
         catch (Exception ex)
         {

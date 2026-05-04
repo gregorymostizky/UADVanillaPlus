@@ -2,7 +2,7 @@
 
 UAD Vanilla Plus (`UAD:VP`) is a lightweight mod for Ultimate Admiral: Dreadnoughts that keeps the base game feel while adding small quality-of-life improvements.
 
-Current version: `0.2.21`
+Current version: `0.2.24`
 
 ## Philosophy
 
@@ -53,6 +53,7 @@ Start the game normally after copying the DLL. If the mod loads, `UAD:VP` and th
 
 - <u>Design ship counts</u>: show active, building, and unavailable ships for each design.
 - <u>Designs tab country viewer</u>: browse major AI nations' ship designs from the campaign Designs tab.
+- <u>British late-hull tower availability</u>: correct missing campaign compatibility between the Battlecruiser VI, G3, and N3 hull families and their matching late British main and secondary towers.
 
 **Balance:**
 
