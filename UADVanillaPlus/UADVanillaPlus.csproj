@@ -48,6 +48,10 @@
       <HintPath>$(UAD_PATH)MelonLoader/Il2CppAssemblies/UnityEngine.CoreModule.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="UnityEngine.InputLegacyModule">
+      <HintPath>$(UAD_PATH)MelonLoader/Il2CppAssemblies/UnityEngine.InputLegacyModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="UnityEngine.PhysicsModule">
       <HintPath>$(UAD_PATH)MelonLoader/Il2CppAssemblies/UnityEngine.PhysicsModule.dll</HintPath>
       <Private>False</Private>

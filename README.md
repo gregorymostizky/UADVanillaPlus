@@ -2,7 +2,7 @@
 
 UAD Vanilla Plus (`UAD:VP`) is a lightweight mod for Ultimate Admiral: Dreadnoughts that keeps the base game feel while adding small quality-of-life improvements.
 
-Current version: `0.2.41`
+Current version: `0.2.50`
 
 ## Philosophy
 
@@ -67,11 +67,12 @@ Start the game normally after copying the DLL. If the mod loads, `UAD:VP` and th
 **QoL:**
 
 - **Battle speed quality-of-life**: keep the player's selected battle speed available when the game tries to slow simulation speed near enemies.
+- **Battle division AI control**: add an `AI` division-order toggle with `6` hotkey support in battle so selected friendly divisions can be handed back to AI control, with manual right-click orders returning them to player control.
 
 **Balance:**
 
 - **Accuracy penalty balance**: lets players reduce extreme smoke, stability, and instability accuracy penalties from ship design.
-- **Battle weather balance**: optionally force daytime fair-weather battles instead of random time and bad-weather rolls.
+- **Battle weather balance**: optionally force daytime, clear skies, calm wind, and calm seas instead of random bad-weather rolls.
 
 ### Experimental
 

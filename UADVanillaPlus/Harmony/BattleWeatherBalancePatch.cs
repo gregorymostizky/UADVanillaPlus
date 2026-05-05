@@ -18,16 +18,19 @@ internal static class BattleWeatherBalancePatch
     private const int BattleWeatherReadbackAttempts = 8;
     private const float BattleWeatherReadbackDelaySeconds = 1f;
     private const float BattleWeatherGuardDelaySeconds = 8f;
+    private const float CalmWavePower = 0f;
+    private const float WeatherValueTolerance = 0.001f;
 
     private static bool isApplyingAlwaysSunny;
     private static bool isBattleWeatherActive;
     private static bool loggedWaitingForWeather;
+    private static bool loggedCalmWaveCorrection;
     private static string lastAppliedWeatherState = string.Empty;
     private static int retryGeneration;
     private static int readbackGeneration;
     private static int guardGeneration;
 
-    internal static bool ApplyAlwaysSunny(string context, bool allowLoadingBattle = false, DayCycleAndWeather? weather = null)
+    internal static bool ApplyAlwaysSunny(string context, bool allowLoadingBattle = false, DayCycleAndWeather? weather = null, bool scheduleReadback = true)
     {
         if (!ShouldForceAlwaysSunny(allowLoadingBattle) || isApplyingAlwaysSunny)
             return false;
@@ -56,7 +59,7 @@ internal static class BattleWeatherBalancePatch
             weather.SetStormIntensity(0f, true);
             weather.DesiredStormIntensity = 0f;
             weather.DesiredStormParticlesIntensity = 0f;
-            weather.DesiredWavesPower = 0f;
+            ForceCalmWaves("Always Sunny apply", weather);
             TryUpdateWeatherDetectionValues(context);
 
             string afterState = SafeWeatherState(weather);
@@ -67,7 +70,9 @@ internal static class BattleWeatherBalancePatch
                     $"UADVP battle weather: forced Always Sunny via {context}. before={beforeState}; after={afterState}.");
             }
 
-            ScheduleReadbackConfirmation(context);
+            if (scheduleReadback)
+                ScheduleReadbackConfirmation(context);
+
             return true;
         }
         catch (Exception ex)
@@ -110,11 +115,51 @@ internal static class BattleWeatherBalancePatch
         readbackGeneration++;
         guardGeneration++;
         loggedWaitingForWeather = false;
+        loggedCalmWaveCorrection = false;
         lastAppliedWeatherState = string.Empty;
     }
 
     private static bool ShouldForceAlwaysSunny(bool allowLoadingBattle)
         => ModSettings.BattleWeatherAlwaysSunny && (isBattleWeatherActive || GameManager.IsBattle || allowLoadingBattle);
+
+    internal static bool ShouldForceAlwaysSunnyLive()
+        => ModSettings.BattleWeatherAlwaysSunny && (isBattleWeatherActive || GameManager.IsBattle || GameManager.IsLoadingBattle);
+
+    internal static bool ShouldForceCalmWaves()
+        => ShouldForceAlwaysSunnyLive();
+
+    internal static bool ForceCalmWaves(string context, DayCycleAndWeather? weather = null)
+    {
+        if (!ShouldForceCalmWaves())
+            return false;
+
+        try
+        {
+            weather ??= DayCycleAndWeather.Instance();
+            if (weather == null)
+                return false;
+
+            float before = weather.DesiredWavesPower;
+            if (Math.Abs(before - CalmWavePower) < WeatherValueTolerance)
+                return true;
+
+            weather.DesiredWavesPower = CalmWavePower;
+            if (!loggedCalmWaveCorrection)
+            {
+                loggedCalmWaveCorrection = true;
+                Melon<UADVanillaPlusMod>.Logger.Msg(
+                    $"UADVP battle weather: enforcing calm waves via {context}. before={before:0.###}; after={weather.DesiredWavesPower:0.###}.");
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Melon<UADVanillaPlusMod>.Logger.Warning(
+                $"UADVP battle weather: calm-wave correction failed during {context}. {ex.GetType().Name}: {ex.Message}");
+            return false;
+        }
+    }
 
     private static IEnumerator RetryBattleWeatherWhenReady(string context, int generation)
     {
@@ -167,6 +212,7 @@ internal static class BattleWeatherBalancePatch
 
             if (IsAlwaysSunny(weather))
             {
+                ForceCalmWaves($"{context} readback", weather);
                 TryUpdateWeatherDetectionValues($"{context} readback");
                 LogConfirmedAlwaysSunny($"{context} readback {attempt}", state);
                 yield break;
@@ -174,7 +220,7 @@ internal static class BattleWeatherBalancePatch
 
             Melon<UADVanillaPlusMod>.Logger.Warning(
                 $"UADVP battle weather: readback after {context} found non-sunny state; reapplying. state={state}.");
-            ApplyAlwaysSunny($"{context} readback correction", allowLoadingBattle: true, weather);
+            ApplyAlwaysSunny($"{context} readback correction", allowLoadingBattle: true, weather, scheduleReadback: false);
             yield break;
         }
 
@@ -237,10 +283,10 @@ internal static class BattleWeatherBalancePatch
             return weather.GetTimeOfDay() == DayCycleAndWeather.TimesOfDay.Day
                 && weather.GetWeatherType() == DayCycleAndWeather.WeatherType.Clear
                 && weather.GetWind(out windProgress) == DayCycleAndWeather.WindStrength.Calm
-                && Math.Abs(weather.StormIntensity) < 0.001f
-                && Math.Abs(weather.DesiredStormIntensity) < 0.001f
-                && Math.Abs(weather.DesiredStormParticlesIntensity) < 0.001f
-                && Math.Abs(weather.DesiredWavesPower) < 0.001f;
+                && Math.Abs(weather.StormIntensity) < WeatherValueTolerance
+                && Math.Abs(weather.DesiredStormIntensity) < WeatherValueTolerance
+                && Math.Abs(weather.DesiredStormParticlesIntensity) < WeatherValueTolerance
+                && Math.Abs(weather.DesiredWavesPower - CalmWavePower) < WeatherValueTolerance;
         }
         catch
         {
@@ -358,4 +404,30 @@ internal static class BattleWeatherDayCyclePresetPatch
     [HarmonyPostfix]
     private static void PostfixSetPreset(DayCycleAndWeather __instance)
         => BattleWeatherBalancePatch.CorrectLiveWeather("DayCycleAndWeather.SetPreset", __instance);
+}
+
+[HarmonyPatch(typeof(DayCycleAndWeather), nameof(DayCycleAndWeather.GetWeatherType))]
+internal static class BattleWeatherDayCycleGetWeatherTypePatch
+{
+    [HarmonyPrefix]
+    private static bool PrefixGetWeatherType(ref DayCycleAndWeather.WeatherType __result)
+    {
+        if (!BattleWeatherBalancePatch.ShouldForceAlwaysSunnyLive())
+            return true;
+
+        __result = DayCycleAndWeather.WeatherType.Clear;
+        return false;
+    }
+}
+
+[HarmonyPatch(typeof(DayCycleAndWeather), nameof(DayCycleAndWeather.UpdateCycle))]
+internal static class BattleWeatherDayCycleUpdatePatch
+{
+    [HarmonyPrefix]
+    private static void PrefixUpdateCycle(DayCycleAndWeather __instance)
+        => BattleWeatherBalancePatch.ForceCalmWaves("DayCycleAndWeather.UpdateCycle pre", __instance);
+
+    [HarmonyPostfix]
+    private static void PostfixUpdateCycle(DayCycleAndWeather __instance)
+        => BattleWeatherBalancePatch.ForceCalmWaves("DayCycleAndWeather.UpdateCycle post", __instance);
 }
