@@ -33,6 +33,7 @@ internal static class InGameOptionsMenuPatch
     private const string ShipyardCapacityOptionName = "UADVP_Option_ShipyardCapacity";
     private const string CampaignMapWraparoundOptionName = "UADVP_Option_CampaignMapWraparound";
     private const string CanalOpeningsOptionName = "UADVP_Option_CanalOpenings";
+    private const string TechnologySpreadOptionName = "UADVP_Option_TechnologySpread";
     private const string MineWarfareOptionName = "UADVP_Option_MineWarfare";
     private const string SubmarineWarfareOptionName = "UADVP_Option_SubmarineWarfare";
 
@@ -316,6 +317,16 @@ internal static class InGameOptionsMenuPatch
                     ("Historical", !ModSettings.EarlyCanalOpeningsEnabled, () => SetCanalOpeningsMode(false)));
                 AddSegmentedOption(
                     pane.transform,
+                    TechnologySpreadOptionName,
+                    "Technology Spread",
+                    "Gradual, Swift, and Unrestricted multiply vanilla research speed for major nations that trail the current leader in a category. Economy, tech budget, priorities, and historical-year gates still apply.",
+                    true,
+                    ("Vanilla", ModSettings.TechnologySpread == ModSettings.TechnologySpreadMode.Vanilla, () => SetTechnologySpreadMode(ModSettings.TechnologySpreadMode.Vanilla)),
+                    ("Gradual", ModSettings.TechnologySpread == ModSettings.TechnologySpreadMode.Gradual, () => SetTechnologySpreadMode(ModSettings.TechnologySpreadMode.Gradual)),
+                    ("Swift", ModSettings.TechnologySpread == ModSettings.TechnologySpreadMode.Swift, () => SetTechnologySpreadMode(ModSettings.TechnologySpreadMode.Swift)),
+                    ("Unrestricted", ModSettings.TechnologySpread == ModSettings.TechnologySpreadMode.Unrestricted, () => SetTechnologySpreadMode(ModSettings.TechnologySpreadMode.Unrestricted)));
+                AddSegmentedOption(
+                    pane.transform,
                     MineWarfareOptionName,
                     "Mine Warfare",
                     "Disabled prevents minefield damage and hides mine and minesweeping equipment from the ship designer. Enabled keeps the game's normal minefields and mine equipment.",
@@ -389,7 +400,7 @@ internal static class InGameOptionsMenuPatch
         AddLayout(labelText.gameObject, minWidth: 155f, flexibleWidth: 1f);
 
         foreach (var segment in segments)
-            AddSegmentButton(row.transform, segment.Label, segment.Selected, segment.OnPress, segments.Length > 2 ? 64f : 112f, interactable, $"{label}: {segment.Label}\n{tooltip}");
+            AddSegmentButton(row.transform, segment.Label, segment.Selected, segment.OnPress, segments.Length > 2 ? 92f : 112f, interactable, $"{label}: {segment.Label}\n{tooltip}");
     }
 
     private static void AddSectionButton(Transform parent, Section section, string label)
@@ -551,6 +562,15 @@ internal static class InGameOptionsMenuPatch
         RefreshLauncherButton();
     }
 
+    private static void SetTechnologySpreadMode(ModSettings.TechnologySpreadMode mode)
+    {
+        if (ModSettings.TechnologySpread != mode)
+            ModSettings.TechnologySpread = mode;
+
+        RefreshMenu();
+        RefreshLauncherButton();
+    }
+
     private static void SetMineWarfareMode(bool disabled)
     {
         if (ModSettings.MineWarfareDisabled != disabled)
@@ -694,12 +714,12 @@ internal static class InGameOptionsMenuPatch
     }
 
     private static bool AnyBalanceOptionEnabled()
-        => ModSettings.BattleWeatherAlwaysSunny || ModSettings.DesignAccuracyPenaltiesBalanced || ModSettings.PortStrikeBalanced || ModSettings.MajorShipTorpedoesRestricted || ModSettings.ObsoleteDesignRetentionEnabled || ModSettings.ShipyardCapacityBalanced || ModSettings.EarlyCanalOpeningsEnabled || ModSettings.MineWarfareDisabled || ModSettings.SubmarineWarfareDisabled || ModSettings.CampaignMapWraparoundEnabled;
+        => ModSettings.BattleWeatherAlwaysSunny || ModSettings.DesignAccuracyPenaltiesBalanced || ModSettings.PortStrikeBalanced || ModSettings.MajorShipTorpedoesRestricted || ModSettings.ObsoleteDesignRetentionEnabled || ModSettings.ShipyardCapacityBalanced || ModSettings.EarlyCanalOpeningsEnabled || ModSettings.TechnologySpread != ModSettings.TechnologySpreadMode.Vanilla || ModSettings.MineWarfareDisabled || ModSettings.SubmarineWarfareDisabled || ModSettings.CampaignMapWraparoundEnabled;
 
     private static void AddLauncherTooltip(GameObject buttonObject)
         => AddTooltip(
             buttonObject,
-            $"UAD:VP Options\nBattle Weather: {BattleWeatherModeText(ModSettings.BattleWeatherAlwaysSunny)}\nAccuracy Penalties: {DesignAccuracyPenaltiesModeText(ModSettings.DesignAccuracyPenaltyMode)}\nPort Strike: {PortStrikeModeText(ModSettings.PortStrikeBalanced)}\nSuspend Dock Overcapacity: {ShipyardCapacityModeText(ModSettings.ShipyardCapacityBalanced)}\nCanal Openings: {CanalOpeningModeText(ModSettings.EarlyCanalOpeningsEnabled)}\nMine Warfare: {MineWarfareModeText(ModSettings.MineWarfareDisabled)}\nSubmarine Warfare: {SubmarineWarfareModeText(ModSettings.SubmarineWarfareDisabled)}\nCA+ Torpedoes: {MajorShipTorpedoesModeText(ModSettings.MajorShipTorpedoesRestricted)}\nObsolete Tech & Hulls: {ObsoleteDesignRetentionModeText(ModSettings.ObsoleteDesignRetentionEnabled)}\nMap Geometry: {CampaignMapWraparoundModeText(ModSettings.CampaignMapWraparoundEnabled)}",
+            $"UAD:VP Options\nBattle Weather: {BattleWeatherModeText(ModSettings.BattleWeatherAlwaysSunny)}\nAccuracy Penalties: {DesignAccuracyPenaltiesModeText(ModSettings.DesignAccuracyPenaltyMode)}\nPort Strike: {PortStrikeModeText(ModSettings.PortStrikeBalanced)}\nSuspend Dock Overcapacity: {ShipyardCapacityModeText(ModSettings.ShipyardCapacityBalanced)}\nCanal Openings: {CanalOpeningModeText(ModSettings.EarlyCanalOpeningsEnabled)}\nTechnology Spread: {TechnologySpreadModeText(ModSettings.TechnologySpread)}\nMine Warfare: {MineWarfareModeText(ModSettings.MineWarfareDisabled)}\nSubmarine Warfare: {SubmarineWarfareModeText(ModSettings.SubmarineWarfareDisabled)}\nCA+ Torpedoes: {MajorShipTorpedoesModeText(ModSettings.MajorShipTorpedoesRestricted)}\nObsolete Tech & Hulls: {ObsoleteDesignRetentionModeText(ModSettings.ObsoleteDesignRetentionEnabled)}\nMap Geometry: {CampaignMapWraparoundModeText(ModSettings.CampaignMapWraparoundEnabled)}",
             () => launcherButton != null && launcherButton.interactable);
 
     private static void AddTooltip(GameObject target, string text, Func<bool>? canShow = null)
@@ -873,6 +893,9 @@ internal static class InGameOptionsMenuPatch
 
     private static string CanalOpeningModeText(bool early)
         => ModSettings.CanalOpeningModeText(early);
+
+    private static string TechnologySpreadModeText(ModSettings.TechnologySpreadMode mode)
+        => ModSettings.TechnologySpreadModeText(mode);
 
     private static string MineWarfareModeText(bool disabled)
         => ModSettings.MineWarfareModeText(disabled);

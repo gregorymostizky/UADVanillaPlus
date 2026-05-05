@@ -18,6 +18,7 @@ internal static class ModSettings
     private const string SubmarineWarfareDisabledKey = "uadvp_submarine_warfare_disabled";
     private const string CampaignMapWraparoundEnabledKey = "uadvp_campaign_map_wraparound_enabled";
     private const string EarlyCanalOpeningsEnabledKey = "uadvp_early_canal_openings_enabled";
+    private const string TechnologySpreadModeKey = "uadvp_technology_spread_mode";
     private const string OldPanamaCanalEarlyEnabledKey = "uadvp_panama_canal_early_enabled";
 
     private static bool? portStrikeBalanced;
@@ -30,6 +31,7 @@ internal static class ModSettings
     private static bool? submarineWarfareDisabled;
     private static bool? campaignMapWraparoundEnabled;
     private static bool? earlyCanalOpeningsEnabled;
+    private static TechnologySpreadMode? technologySpreadMode;
 
     internal enum AccuracyPenaltyMode
     {
@@ -37,6 +39,14 @@ internal static class ModSettings
         Div5 = 5,
         Div2 = 2,
         Vanilla = 1,
+    }
+
+    internal enum TechnologySpreadMode
+    {
+        Vanilla = 0,
+        Gradual = 1,
+        Swift = 2,
+        Unrestricted = 3,
     }
 
     internal static bool PortStrikeBalanced
@@ -176,6 +186,19 @@ internal static class ModSettings
         }
     }
 
+    internal static TechnologySpreadMode TechnologySpread
+    {
+        get => technologySpreadMode ??= LoadTechnologySpreadMode();
+        set
+        {
+            technologySpreadMode = value;
+            PlayerPrefs.SetInt(TechnologySpreadModeKey, (int)value);
+            PlayerPrefs.Save();
+            Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP option: Technology Spread mode {TechnologySpreadModeText(value)}.");
+            LogCurrentSettings("after Technology Spread change");
+        }
+    }
+
     internal static bool DesignAccuracyPenaltiesBalanced
         => DesignAccuracyPenaltyMode != AccuracyPenaltyMode.Vanilla;
 
@@ -196,6 +219,7 @@ internal static class ModSettings
            $"Port Strike={PortStrikeModeText(PortStrikeBalanced)}; " +
            $"Suspend Dock Overcapacity={ShipyardCapacityModeText(ShipyardCapacityBalanced)}; " +
            $"Canal Openings={CanalOpeningModeText(EarlyCanalOpeningsEnabled)}; " +
+           $"Technology Spread={TechnologySpreadModeText(TechnologySpread)}; " +
            $"Mine Warfare={MineWarfareModeText(MineWarfareDisabled)}; " +
            $"Submarine Warfare={SubmarineWarfareModeText(SubmarineWarfareDisabled)}; " +
            $"CA+ Torpedoes={MajorShipTorpedoesModeText(MajorShipTorpedoesRestricted)}; " +
@@ -229,6 +253,15 @@ internal static class ModSettings
     internal static string CampaignMapModeText(bool enabled)
         => enabled ? "Disc World" : "Flat Earth";
 
+    internal static string TechnologySpreadModeText(TechnologySpreadMode mode)
+        => mode switch
+        {
+            TechnologySpreadMode.Gradual => "Gradual",
+            TechnologySpreadMode.Swift => "Swift",
+            TechnologySpreadMode.Unrestricted => "Unrestricted",
+            _ => "Vanilla",
+        };
+
     private static AccuracyPenaltyMode LoadAccuracyPenaltyMode()
     {
         int stored = PlayerPrefs.GetInt(DesignAccuracyPenaltyModeKey, (int)AccuracyPenaltyMode.Div5);
@@ -241,5 +274,13 @@ internal static class ModSettings
             return PlayerPrefs.GetInt(EarlyCanalOpeningsEnabledKey, 0) != 0;
 
         return PlayerPrefs.GetInt(OldPanamaCanalEarlyEnabledKey, 0) != 0;
+    }
+
+    private static TechnologySpreadMode LoadTechnologySpreadMode()
+    {
+        int stored = PlayerPrefs.GetInt(TechnologySpreadModeKey, (int)TechnologySpreadMode.Vanilla);
+        return Enum.IsDefined(typeof(TechnologySpreadMode), stored)
+            ? (TechnologySpreadMode)stored
+            : TechnologySpreadMode.Vanilla;
     }
 }

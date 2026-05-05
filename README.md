@@ -2,7 +2,7 @@
 
 UAD Vanilla Plus (`UAD:VP`) is a lightweight mod for Ultimate Admiral: Dreadnoughts that keeps the base game feel while adding small quality-of-life improvements.
 
-Current version: `0.2.52`
+Current version: `0.2.59`
 
 ## Philosophy
 
@@ -39,6 +39,7 @@ Start the game normally after copying the DLL. If the mod loads, `UAD:VP` and th
 - **Campaign active fleet port count**: show how many active vessels are currently in port.
 - **Campaign construction summaries**: split own builds, foreign contracts, and commissioning ships in the existing build counts.
 - **Campaign technology indicator**: show a compact estimate for the next expected research discovery.
+- **Research standing markers**: show colored badges spelling out whether each research category is ahead of, behind, or tied with the leading major nation.
 - **Direct diplomacy politics actions**: add Declare War and Force Peace buttons with confirmation to campaign politics rows, with Force Peace using the vanilla reparation flow when war victory points produce a clear winner.
 - **In-game options menu**: control UAD:VP balance options from the top-right game UI.
 
@@ -47,6 +48,7 @@ Start the game normally after copying the DLL. If the mod loads, `UAD:VP` and th
 - **Port Strike balance**: scales transport losses from undefended port strikes by attacker tonnage instead of allowing small raiders to destroy large transport groups.
 - **Suspend Dock Overcapacity**: automatically delays lower-priority repairs, builds, and refits when monthly dock work exceeds shipyard capacity; manual mode keeps vanilla overcapacity handling.
 - **Canal openings**: optional setting to open the Panama and Kiel canals from 1890 when a campaign map loads, matching early-campaign canals such as Suez; historical mode keeps vanilla's 1914 and 1895 opening years.
+- **Technology Spread**: optional `Gradual`, `Swift`, and `Unrestricted` modes that help major nations catch up faster in research categories where they trail the current leader. This defaults to vanilla.
 - **Mine Warfare**: optional setting to disable minefield damage in existing campaigns and hide mine and minesweeping equipment from the ship designer. This defaults to enabled.
 - **Submarine Warfare**: optional setting to disable submarine construction and submarine campaign battles while leaving existing submarines in saved campaigns untouched. This defaults to enabled.
 
