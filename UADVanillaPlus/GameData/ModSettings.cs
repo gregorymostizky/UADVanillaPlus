@@ -14,6 +14,8 @@ internal static class ModSettings
     private const string MajorShipTorpedoesRestrictedKey = "uadvp_major_ship_torpedoes_restricted";
     private const string ObsoleteDesignRetentionEnabledKey = "uadvp_obsolete_design_retention_enabled";
     private const string ShipyardCapacityBalancedKey = "uadvp_shipyard_capacity_balanced";
+    private const string MineWarfareDisabledKey = "uadvp_mine_warfare_disabled";
+    private const string SubmarineWarfareDisabledKey = "uadvp_submarine_warfare_disabled";
     private const string CampaignMapWraparoundEnabledKey = "uadvp_campaign_map_wraparound_enabled";
     private const string EarlyCanalOpeningsEnabledKey = "uadvp_early_canal_openings_enabled";
     private const string OldPanamaCanalEarlyEnabledKey = "uadvp_panama_canal_early_enabled";
@@ -24,6 +26,8 @@ internal static class ModSettings
     private static bool? majorShipTorpedoesRestricted;
     private static bool? obsoleteDesignRetentionEnabled;
     private static bool? shipyardCapacityBalanced;
+    private static bool? mineWarfareDisabled;
+    private static bool? submarineWarfareDisabled;
     private static bool? campaignMapWraparoundEnabled;
     private static bool? earlyCanalOpeningsEnabled;
 
@@ -120,6 +124,32 @@ internal static class ModSettings
         }
     }
 
+    internal static bool MineWarfareDisabled
+    {
+        get => mineWarfareDisabled ??= PlayerPrefs.GetInt(MineWarfareDisabledKey, 0) != 0;
+        set
+        {
+            mineWarfareDisabled = value;
+            PlayerPrefs.SetInt(MineWarfareDisabledKey, value ? 1 : 0);
+            PlayerPrefs.Save();
+            Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP option: Mine Warfare mode {(value ? "Disabled" : "Enabled")}.");
+            LogCurrentSettings("after Mine Warfare change");
+        }
+    }
+
+    internal static bool SubmarineWarfareDisabled
+    {
+        get => submarineWarfareDisabled ??= PlayerPrefs.GetInt(SubmarineWarfareDisabledKey, 0) != 0;
+        set
+        {
+            submarineWarfareDisabled = value;
+            PlayerPrefs.SetInt(SubmarineWarfareDisabledKey, value ? 1 : 0);
+            PlayerPrefs.Save();
+            Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP option: Submarine Warfare mode {(value ? "Disabled" : "Enabled")}.");
+            LogCurrentSettings("after Submarine Warfare change");
+        }
+    }
+
     internal static bool CampaignMapWraparoundEnabled
     {
         get => campaignMapWraparoundEnabled ??= PlayerPrefs.GetInt(CampaignMapWraparoundEnabledKey, 0) != 0;
@@ -166,6 +196,8 @@ internal static class ModSettings
            $"Port Strike={PortStrikeModeText(PortStrikeBalanced)}; " +
            $"Suspend Dock Overcapacity={ShipyardCapacityModeText(ShipyardCapacityBalanced)}; " +
            $"Canal Openings={CanalOpeningModeText(EarlyCanalOpeningsEnabled)}; " +
+           $"Mine Warfare={MineWarfareModeText(MineWarfareDisabled)}; " +
+           $"Submarine Warfare={SubmarineWarfareModeText(SubmarineWarfareDisabled)}; " +
            $"CA+ Torpedoes={MajorShipTorpedoesModeText(MajorShipTorpedoesRestricted)}; " +
            $"Obsolete Tech & Hulls={ObsoleteDesignRetentionModeText(ObsoleteDesignRetentionEnabled)}; " +
            $"Map Geometry={CampaignMapModeText(CampaignMapWraparoundEnabled)}";
@@ -181,6 +213,12 @@ internal static class ModSettings
 
     internal static string CanalOpeningModeText(bool early)
         => early ? "Early" : "Historical";
+
+    internal static string MineWarfareModeText(bool disabled)
+        => disabled ? "Disabled" : "Enabled";
+
+    internal static string SubmarineWarfareModeText(bool disabled)
+        => disabled ? "Disabled" : "Enabled";
 
     internal static string MajorShipTorpedoesModeText(bool restricted)
         => restricted ? "Disallowed" : "Vanilla";

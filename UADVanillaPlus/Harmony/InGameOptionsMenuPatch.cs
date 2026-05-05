@@ -33,6 +33,8 @@ internal static class InGameOptionsMenuPatch
     private const string ShipyardCapacityOptionName = "UADVP_Option_ShipyardCapacity";
     private const string CampaignMapWraparoundOptionName = "UADVP_Option_CampaignMapWraparound";
     private const string CanalOpeningsOptionName = "UADVP_Option_CanalOpenings";
+    private const string MineWarfareOptionName = "UADVP_Option_MineWarfare";
+    private const string SubmarineWarfareOptionName = "UADVP_Option_SubmarineWarfare";
 
     private static readonly Color Background = new(0f, 0f, 0f, 0.94f);
     private static readonly Color RowBackground = new(0.09f, 0.09f, 0.09f, 0.96f);
@@ -312,6 +314,22 @@ internal static class InGameOptionsMenuPatch
                     true,
                     ("Early", ModSettings.EarlyCanalOpeningsEnabled, () => SetCanalOpeningsMode(true)),
                     ("Historical", !ModSettings.EarlyCanalOpeningsEnabled, () => SetCanalOpeningsMode(false)));
+                AddSegmentedOption(
+                    pane.transform,
+                    MineWarfareOptionName,
+                    "Mine Warfare",
+                    "Disabled prevents minefield damage and hides mine and minesweeping equipment from the ship designer. Enabled keeps the game's normal minefields and mine equipment.",
+                    true,
+                    ("Disabled", ModSettings.MineWarfareDisabled, () => SetMineWarfareMode(true)),
+                    ("Enabled", !ModSettings.MineWarfareDisabled, () => SetMineWarfareMode(false)));
+                AddSegmentedOption(
+                    pane.transform,
+                    SubmarineWarfareOptionName,
+                    "Submarine Warfare",
+                    "Disabled prevents submarine construction and submarine campaign battles while leaving existing submarines in saved campaigns untouched. Enabled keeps the game's normal submarine warfare.",
+                    true,
+                    ("Disabled", ModSettings.SubmarineWarfareDisabled, () => SetSubmarineWarfareMode(true)),
+                    ("Enabled", !ModSettings.SubmarineWarfareDisabled, () => SetSubmarineWarfareMode(false)));
                 break;
             case Section.ShipDesign:
                 AddSegmentedOption(
@@ -533,10 +551,44 @@ internal static class InGameOptionsMenuPatch
         RefreshLauncherButton();
     }
 
+    private static void SetMineWarfareMode(bool disabled)
+    {
+        if (ModSettings.MineWarfareDisabled != disabled)
+        {
+            ModSettings.MineWarfareDisabled = disabled;
+            RefreshConstructorAvailabilityUi("Mine Warfare");
+        }
+
+        RefreshMenu();
+        RefreshLauncherButton();
+    }
+
+    private static void SetSubmarineWarfareMode(bool disabled)
+    {
+        if (ModSettings.SubmarineWarfareDisabled != disabled)
+        {
+            ModSettings.SubmarineWarfareDisabled = disabled;
+            RefreshSubmarineWarfareUi();
+        }
+
+        RefreshMenu();
+        RefreshLauncherButton();
+    }
+
     private static void RefreshConstructorAvailabilityUi()
+        => RefreshConstructorAvailabilityUi("Obsolete Tech & Hulls");
+
+    private static void RefreshConstructorAvailabilityUi(string optionName)
     {
         try
         {
+            if (!GameManager.IsConstructor)
+            {
+                Melon<UADVanillaPlusMod>.Logger.Msg(
+                    $"UADVP option: stored {optionName} mode change; constructor UI is not active.");
+                return;
+            }
+
             Ui? ui = G.ui;
             if (ui == null || PlayerController.Instance == null)
                 return;
@@ -547,12 +599,35 @@ internal static class InGameOptionsMenuPatch
             try { RefreshConstructorParts?.Invoke(ui, Array.Empty<object>()); }
             catch (Exception ex) { Melon<UADVanillaPlusMod>.Logger.Warning($"UADVP option: constructor parts refresh failed. {ex.GetType().Name}: {ex.Message}"); }
 
-            Melon<UADVanillaPlusMod>.Logger.Msg("UADVP option: refreshed constructor availability UI after Obsolete Tech & Hulls mode change.");
+            Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP option: refreshed constructor availability UI after {optionName} mode change.");
         }
         catch (Exception ex)
         {
             Melon<UADVanillaPlusMod>.Logger.Warning(
                 $"UADVP option: constructor availability refresh skipped. {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    private static void RefreshSubmarineWarfareUi()
+    {
+        try
+        {
+            Ui? ui = G.ui;
+            if (ui == null || PlayerController.Instance == null || CampaignController.Instance?.CampaignData == null)
+                return;
+
+            try { ui.CountryInfo?.Refresh(); }
+            catch (Exception ex) { Melon<UADVanillaPlusMod>.Logger.Warning($"UADVP option: submarine warfare country-info refresh failed. {ex.GetType().Name}: {ex.Message}"); }
+
+            try { ui.SubmarineWindow?.Refresh(); }
+            catch (Exception ex) { Melon<UADVanillaPlusMod>.Logger.Warning($"UADVP option: submarine warfare window refresh failed. {ex.GetType().Name}: {ex.Message}"); }
+
+            Melon<UADVanillaPlusMod>.Logger.Msg("UADVP option: refreshed submarine warfare UI after mode change.");
+        }
+        catch (Exception ex)
+        {
+            Melon<UADVanillaPlusMod>.Logger.Warning(
+                $"UADVP option: submarine warfare UI refresh skipped. {ex.GetType().Name}: {ex.Message}");
         }
     }
 
@@ -619,12 +694,12 @@ internal static class InGameOptionsMenuPatch
     }
 
     private static bool AnyBalanceOptionEnabled()
-        => ModSettings.BattleWeatherAlwaysSunny || ModSettings.DesignAccuracyPenaltiesBalanced || ModSettings.PortStrikeBalanced || ModSettings.MajorShipTorpedoesRestricted || ModSettings.ObsoleteDesignRetentionEnabled || ModSettings.ShipyardCapacityBalanced || ModSettings.EarlyCanalOpeningsEnabled || ModSettings.CampaignMapWraparoundEnabled;
+        => ModSettings.BattleWeatherAlwaysSunny || ModSettings.DesignAccuracyPenaltiesBalanced || ModSettings.PortStrikeBalanced || ModSettings.MajorShipTorpedoesRestricted || ModSettings.ObsoleteDesignRetentionEnabled || ModSettings.ShipyardCapacityBalanced || ModSettings.EarlyCanalOpeningsEnabled || ModSettings.MineWarfareDisabled || ModSettings.SubmarineWarfareDisabled || ModSettings.CampaignMapWraparoundEnabled;
 
     private static void AddLauncherTooltip(GameObject buttonObject)
         => AddTooltip(
             buttonObject,
-            $"UAD:VP Options\nBattle Weather: {BattleWeatherModeText(ModSettings.BattleWeatherAlwaysSunny)}\nAccuracy Penalties: {DesignAccuracyPenaltiesModeText(ModSettings.DesignAccuracyPenaltyMode)}\nPort Strike: {PortStrikeModeText(ModSettings.PortStrikeBalanced)}\nSuspend Dock Overcapacity: {ShipyardCapacityModeText(ModSettings.ShipyardCapacityBalanced)}\nCanal Openings: {CanalOpeningModeText(ModSettings.EarlyCanalOpeningsEnabled)}\nCA+ Torpedoes: {MajorShipTorpedoesModeText(ModSettings.MajorShipTorpedoesRestricted)}\nObsolete Tech & Hulls: {ObsoleteDesignRetentionModeText(ModSettings.ObsoleteDesignRetentionEnabled)}\nMap Geometry: {CampaignMapWraparoundModeText(ModSettings.CampaignMapWraparoundEnabled)}",
+            $"UAD:VP Options\nBattle Weather: {BattleWeatherModeText(ModSettings.BattleWeatherAlwaysSunny)}\nAccuracy Penalties: {DesignAccuracyPenaltiesModeText(ModSettings.DesignAccuracyPenaltyMode)}\nPort Strike: {PortStrikeModeText(ModSettings.PortStrikeBalanced)}\nSuspend Dock Overcapacity: {ShipyardCapacityModeText(ModSettings.ShipyardCapacityBalanced)}\nCanal Openings: {CanalOpeningModeText(ModSettings.EarlyCanalOpeningsEnabled)}\nMine Warfare: {MineWarfareModeText(ModSettings.MineWarfareDisabled)}\nSubmarine Warfare: {SubmarineWarfareModeText(ModSettings.SubmarineWarfareDisabled)}\nCA+ Torpedoes: {MajorShipTorpedoesModeText(ModSettings.MajorShipTorpedoesRestricted)}\nObsolete Tech & Hulls: {ObsoleteDesignRetentionModeText(ModSettings.ObsoleteDesignRetentionEnabled)}\nMap Geometry: {CampaignMapWraparoundModeText(ModSettings.CampaignMapWraparoundEnabled)}",
             () => launcherButton != null && launcherButton.interactable);
 
     private static void AddTooltip(GameObject target, string text, Func<bool>? canShow = null)
@@ -798,6 +873,12 @@ internal static class InGameOptionsMenuPatch
 
     private static string CanalOpeningModeText(bool early)
         => ModSettings.CanalOpeningModeText(early);
+
+    private static string MineWarfareModeText(bool disabled)
+        => ModSettings.MineWarfareModeText(disabled);
+
+    private static string SubmarineWarfareModeText(bool disabled)
+        => ModSettings.SubmarineWarfareModeText(disabled);
 
     private static string CampaignMapWraparoundModeText(bool enabled)
         => enabled ? "Disc World" : "Flat Earth";
