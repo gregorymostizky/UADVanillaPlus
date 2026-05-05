@@ -2,7 +2,7 @@
 
 UAD Vanilla Plus (`UAD:VP`) is a lightweight mod for Ultimate Admiral: Dreadnoughts that keeps the base game feel while adding small quality-of-life improvements.
 
-Current version: `0.2.31`
+Current version: `0.2.41`
 
 ## Philosophy
 
@@ -46,6 +46,7 @@ Start the game normally after copying the DLL. If the mod loads, `UAD:VP` and th
 
 - **Port Strike balance**: scales transport losses from undefended port strikes by attacker tonnage instead of allowing small raiders to destroy large transport groups.
 - **Suspend Dock Overcapacity**: automatically delays lower-priority repairs, builds, and refits when monthly dock work exceeds shipyard capacity; manual mode keeps vanilla overcapacity handling.
+- **Canal openings**: optional setting to open the Panama and Kiel canals from 1890 when a campaign map loads, matching early-campaign canals such as Suez; historical mode keeps vanilla's 1914 and 1895 opening years.
 
 ### Design
 
@@ -53,6 +54,7 @@ Start the game normally after copying the DLL. If the mod loads, `UAD:VP` and th
 
 - **Design ship counts**: show active, building, and unavailable ships for each design.
 - **Designs tab country viewer**: browse major AI nations' ship designs from the campaign Designs tab.
+- **Refit design names**: use compact `Class (year)` names for player and AI refit designs, with same-year conflicts written as `Class (yearb)`, `Class (yearc)`, and so on.
 - **British late-hull tower availability**: correct missing campaign compatibility between the Battlecruiser VI, G3, and N3 hull families and their matching late British main and secondary towers.
 
 **Balance:**
@@ -73,11 +75,11 @@ Start the game normally after copying the DLL. If the mod loads, `UAD:VP` and th
 
 ### Experimental
 
-- **Map Geometry**: optional `Disc World` seamless visual wrap-around for the campaign map at the Pacific edge, including clickable port/task-force/mission marker copies, wrapped task-force route visuals, and wrapped-map movement clicks/destinations. The `Flat Earth` setting keeps vanilla map geometry and remains the default.
+- **Map Geometry**: optional `Disc World` seamless visual wrap-around for the campaign map at the Pacific edge, including source map material detail on side maps, clickable port/task-force/mission marker copies, wrapped task-force route visuals, and wrapped-map movement clicks/destinations. The `Flat Earth` setting keeps vanilla map geometry and remains the default.
 
 ## Known Issues
 
-- Map Geometry's `Disc World` mode is still experimental. Map surface, labels, political overlays, grid visuals, wrapped port/task-force/mission marker clicks, task-force route visuals, and wrapped-map movement destination clicks wrap, but some less-common map interactions and marker types may still use vanilla map behavior.
+- Map Geometry's `Disc World` mode is still experimental. Map surface/material details, labels, political overlays, grid visuals, wrapped port/task-force/mission marker clicks, task-force route visuals, and wrapped-map movement destination clicks wrap. Country/state border-line rendering on side maps is still under diagnostic investigation, and some less-common map interactions and marker types may still use vanilla map behavior.
 
 ## Building And Running From Source
 

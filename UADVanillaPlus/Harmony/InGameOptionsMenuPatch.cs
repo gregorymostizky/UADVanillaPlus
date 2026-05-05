@@ -32,6 +32,7 @@ internal static class InGameOptionsMenuPatch
     private const string ObsoleteDesignRetentionOptionName = "UADVP_Option_ObsoleteDesignRetention";
     private const string ShipyardCapacityOptionName = "UADVP_Option_ShipyardCapacity";
     private const string CampaignMapWraparoundOptionName = "UADVP_Option_CampaignMapWraparound";
+    private const string CanalOpeningsOptionName = "UADVP_Option_CanalOpenings";
 
     private static readonly Color Background = new(0f, 0f, 0f, 0.94f);
     private static readonly Color RowBackground = new(0.09f, 0.09f, 0.09f, 0.96f);
@@ -303,6 +304,14 @@ internal static class InGameOptionsMenuPatch
                     true,
                     ("Automatic", ModSettings.ShipyardCapacityBalanced, () => SetShipyardCapacityMode(true)),
                     ("Manual", !ModSettings.ShipyardCapacityBalanced, () => SetShipyardCapacityMode(false)));
+                AddSegmentedOption(
+                    pane.transform,
+                    CanalOpeningsOptionName,
+                    "Canal Openings",
+                    "Early opens the Panama and Kiel canals from 1890 when a campaign map loads, like Suez and the other early canals. Historical keeps vanilla's 1914 and 1895 opening years.",
+                    true,
+                    ("Early", ModSettings.EarlyCanalOpeningsEnabled, () => SetCanalOpeningsMode(true)),
+                    ("Historical", !ModSettings.EarlyCanalOpeningsEnabled, () => SetCanalOpeningsMode(false)));
                 break;
             case Section.ShipDesign:
                 AddSegmentedOption(
@@ -512,6 +521,18 @@ internal static class InGameOptionsMenuPatch
         RefreshLauncherButton();
     }
 
+    private static void SetCanalOpeningsMode(bool early)
+    {
+        if (ModSettings.EarlyCanalOpeningsEnabled != early)
+        {
+            ModSettings.EarlyCanalOpeningsEnabled = early;
+            CampaignCanalOpeningPatch.ApplyCurrentSetting();
+        }
+
+        RefreshMenu();
+        RefreshLauncherButton();
+    }
+
     private static void RefreshConstructorAvailabilityUi()
     {
         try
@@ -598,12 +619,12 @@ internal static class InGameOptionsMenuPatch
     }
 
     private static bool AnyBalanceOptionEnabled()
-        => ModSettings.BattleWeatherAlwaysSunny || ModSettings.DesignAccuracyPenaltiesBalanced || ModSettings.PortStrikeBalanced || ModSettings.MajorShipTorpedoesRestricted || ModSettings.ObsoleteDesignRetentionEnabled || ModSettings.ShipyardCapacityBalanced || ModSettings.CampaignMapWraparoundEnabled;
+        => ModSettings.BattleWeatherAlwaysSunny || ModSettings.DesignAccuracyPenaltiesBalanced || ModSettings.PortStrikeBalanced || ModSettings.MajorShipTorpedoesRestricted || ModSettings.ObsoleteDesignRetentionEnabled || ModSettings.ShipyardCapacityBalanced || ModSettings.EarlyCanalOpeningsEnabled || ModSettings.CampaignMapWraparoundEnabled;
 
     private static void AddLauncherTooltip(GameObject buttonObject)
         => AddTooltip(
             buttonObject,
-            $"UAD:VP Options\nBattle Weather: {BattleWeatherModeText(ModSettings.BattleWeatherAlwaysSunny)}\nAccuracy Penalties: {DesignAccuracyPenaltiesModeText(ModSettings.DesignAccuracyPenaltyMode)}\nPort Strike: {PortStrikeModeText(ModSettings.PortStrikeBalanced)}\nSuspend Dock Overcapacity: {ShipyardCapacityModeText(ModSettings.ShipyardCapacityBalanced)}\nCA+ Torpedoes: {MajorShipTorpedoesModeText(ModSettings.MajorShipTorpedoesRestricted)}\nObsolete Tech & Hulls: {ObsoleteDesignRetentionModeText(ModSettings.ObsoleteDesignRetentionEnabled)}\nMap Geometry: {CampaignMapWraparoundModeText(ModSettings.CampaignMapWraparoundEnabled)}",
+            $"UAD:VP Options\nBattle Weather: {BattleWeatherModeText(ModSettings.BattleWeatherAlwaysSunny)}\nAccuracy Penalties: {DesignAccuracyPenaltiesModeText(ModSettings.DesignAccuracyPenaltyMode)}\nPort Strike: {PortStrikeModeText(ModSettings.PortStrikeBalanced)}\nSuspend Dock Overcapacity: {ShipyardCapacityModeText(ModSettings.ShipyardCapacityBalanced)}\nCanal Openings: {CanalOpeningModeText(ModSettings.EarlyCanalOpeningsEnabled)}\nCA+ Torpedoes: {MajorShipTorpedoesModeText(ModSettings.MajorShipTorpedoesRestricted)}\nObsolete Tech & Hulls: {ObsoleteDesignRetentionModeText(ModSettings.ObsoleteDesignRetentionEnabled)}\nMap Geometry: {CampaignMapWraparoundModeText(ModSettings.CampaignMapWraparoundEnabled)}",
             () => launcherButton != null && launcherButton.interactable);
 
     private static void AddTooltip(GameObject target, string text, Func<bool>? canShow = null)
@@ -774,6 +795,9 @@ internal static class InGameOptionsMenuPatch
 
     private static string ShipyardCapacityModeText(bool balanced)
         => balanced ? "Automatic" : "Manual";
+
+    private static string CanalOpeningModeText(bool early)
+        => ModSettings.CanalOpeningModeText(early);
 
     private static string CampaignMapWraparoundModeText(bool enabled)
         => enabled ? "Disc World" : "Flat Earth";

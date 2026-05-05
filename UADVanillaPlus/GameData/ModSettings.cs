@@ -15,6 +15,8 @@ internal static class ModSettings
     private const string ObsoleteDesignRetentionEnabledKey = "uadvp_obsolete_design_retention_enabled";
     private const string ShipyardCapacityBalancedKey = "uadvp_shipyard_capacity_balanced";
     private const string CampaignMapWraparoundEnabledKey = "uadvp_campaign_map_wraparound_enabled";
+    private const string EarlyCanalOpeningsEnabledKey = "uadvp_early_canal_openings_enabled";
+    private const string OldPanamaCanalEarlyEnabledKey = "uadvp_panama_canal_early_enabled";
 
     private static bool? portStrikeBalanced;
     private static bool? battleWeatherAlwaysSunny;
@@ -23,6 +25,7 @@ internal static class ModSettings
     private static bool? obsoleteDesignRetentionEnabled;
     private static bool? shipyardCapacityBalanced;
     private static bool? campaignMapWraparoundEnabled;
+    private static bool? earlyCanalOpeningsEnabled;
 
     internal enum AccuracyPenaltyMode
     {
@@ -130,6 +133,19 @@ internal static class ModSettings
         }
     }
 
+    internal static bool EarlyCanalOpeningsEnabled
+    {
+        get => earlyCanalOpeningsEnabled ??= LoadEarlyCanalOpeningsEnabled();
+        set
+        {
+            earlyCanalOpeningsEnabled = value;
+            PlayerPrefs.SetInt(EarlyCanalOpeningsEnabledKey, value ? 1 : 0);
+            PlayerPrefs.Save();
+            Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP option: Canal Openings mode {(value ? "Early" : "Historical")}.");
+            LogCurrentSettings("after Canal Openings change");
+        }
+    }
+
     internal static bool DesignAccuracyPenaltiesBalanced
         => DesignAccuracyPenaltyMode != AccuracyPenaltyMode.Vanilla;
 
@@ -149,6 +165,7 @@ internal static class ModSettings
            $"Accuracy Penalties={AccuracyPenaltyModeText(DesignAccuracyPenaltyMode)}; " +
            $"Port Strike={PortStrikeModeText(PortStrikeBalanced)}; " +
            $"Suspend Dock Overcapacity={ShipyardCapacityModeText(ShipyardCapacityBalanced)}; " +
+           $"Canal Openings={CanalOpeningModeText(EarlyCanalOpeningsEnabled)}; " +
            $"CA+ Torpedoes={MajorShipTorpedoesModeText(MajorShipTorpedoesRestricted)}; " +
            $"Obsolete Tech & Hulls={ObsoleteDesignRetentionModeText(ObsoleteDesignRetentionEnabled)}; " +
            $"Map Geometry={CampaignMapModeText(CampaignMapWraparoundEnabled)}";
@@ -161,6 +178,9 @@ internal static class ModSettings
 
     internal static string ShipyardCapacityModeText(bool balanced)
         => balanced ? "Automatic" : "Manual";
+
+    internal static string CanalOpeningModeText(bool early)
+        => early ? "Early" : "Historical";
 
     internal static string MajorShipTorpedoesModeText(bool restricted)
         => restricted ? "Disallowed" : "Vanilla";
@@ -175,5 +195,13 @@ internal static class ModSettings
     {
         int stored = PlayerPrefs.GetInt(DesignAccuracyPenaltyModeKey, (int)AccuracyPenaltyMode.Div5);
         return Enum.IsDefined(typeof(AccuracyPenaltyMode), stored) ? (AccuracyPenaltyMode)stored : AccuracyPenaltyMode.Div5;
+    }
+
+    private static bool LoadEarlyCanalOpeningsEnabled()
+    {
+        if (PlayerPrefs.HasKey(EarlyCanalOpeningsEnabledKey))
+            return PlayerPrefs.GetInt(EarlyCanalOpeningsEnabledKey, 0) != 0;
+
+        return PlayerPrefs.GetInt(OldPanamaCanalEarlyEnabledKey, 0) != 0;
     }
 }

@@ -6,7 +6,7 @@
 - Option values: `Disc World` enables the experimental wrap illusion; `Flat Earth` keeps vanilla map geometry.
 - Menu location: UAD:VP options -> `Experimental`.
 - Default state: off.
-- Current version after adding seamless camera rotation: `0.2.1`.
+- Current version after adding generic mesh/material diagnostics for the missing country-line layer: `0.2.39`.
 - Current source files:
   - `UADVanillaPlus/Harmony/CampaignMapWrapVisualPatch.cs`
   - `UADVanillaPlus/GameData/ModSettings.cs`
@@ -17,7 +17,7 @@
 
 - Horizontal camera bounds can expand by one map width on either side when the option is enabled.
 - The Pacific edge can be shown as a wrap illusion by rendering neighbor copies of the campaign map surface at `+/- CampaignMap.mapWidth`.
-- The wrapped side maps now render with the correct base texture, native grid, area/province labels, and political country overlays.
+- The wrapped side maps now render with the correct source map material layers, native grid, area/province labels, and political country overlays.
 - Port, task-force, and event/mission UI marker copies are synced to the side maps from vanilla `CampaignMapElement.UpdatePositionScale` calls.
 - Wrapped port, task-force, and event/mission marker copies can proxy clicks and hover handling to the original marker/button.
 - Wrapped-map movement clicks now keep the visual side-map coordinate instead of forcing the destination back into the original map bounds. This lets vanilla pathfinding, the move dialog, and the final Move command share the same seam-aware destination value.
@@ -59,6 +59,10 @@
   - The original map remains the authoritative vanilla map; side copies are visual/raycast proxies for whichever seam is currently in view.
 - Native `MapVisualGrid` cloning is the correct grid path. Earlier procedural grid attempts rendered on top of the map and changed ocean color.
 - Country overlays must be created after the game swaps neutral materials for live `player-*` materials. Creating them immediately after `CampaignMap.PostInit` produces grey masks.
+- `0.2.36` adds a one-shot `UADVP map wrap border diag ...` summary after country overlays are ready. It counts likely `CampaignBordersManager` sources and samples renderer paths/materials without cloning anything.
+- `0.2.37` prioritizes named border-candidate samples and separates VP-generated overlay children from original country highlight meshes so the useful renderer paths are visible in the log.
+- `0.2.38` adds a one-shot active-scene border diagnostic that excludes the known `WorldEx/2DMap` root and VP-generated wrap objects, then reports line-renderer and border-keyword candidates elsewhere in the scene.
+- `0.2.39` adds generic mesh/material sampling for the `WorldEx/2DMap` root and visible non-text scene meshes, including material, shader, render queue, and common texture names.
 - The toggle is intended to work live:
   - Enabling creates current campaign map wrap visuals if the map already exists.
   - Disabling clears wrap visuals, restores side borders, and lets vanilla camera bounds run again.
@@ -67,10 +71,11 @@
 
 - `CampaignMapWrapVisualPatch` is visual-only for now. It does not make the world truly cylindrical.
 - The working approach is an illusion: keep the original map authoritative, show pooled side copies only near the visible seam, and rotate the camera by one map width when it crosses an edge.
-- The base map copies use the original map mesh and texture with an unlit/sprite-compatible material at a high render queue.
+- The base map copies use the original map mesh and cloned live source map materials at a high render queue.
 - The base map copies also receive a `MeshCollider` using the same mesh, layer, and tag as the vanilla map surface, so `CampaignMap.DetectClick()` can hit them.
 - Native side borders are hidden while wrap is enabled and restored when disabled.
 - Static visual roots are cloned and non-rendering behaviours/colliders are disabled so they do not act like live UI/game objects.
+- Country/state border-line rendering on side maps remains unresolved. A broad passive-root clone from `CampaignBordersManager` disrupted normal map label/country-name composition and was reverted; the current pass is diagnostic-only until the exact renderer path is known.
 - Port/task-force/event marker copies keep the original markers authoritative and derive their side-map positions from vanilla UI positions plus `+/- CampaignMap.mapWidth`.
 - Port marker copies selectively re-enable the cloned `PortButton` raycast path and forward vanilla `OnClickH`, `OnEnter`, and `OnLeave` handling to the original `PortButton`.
 - Task-force marker copies selectively re-enable the cloned `ShipUI.Btn` raycast path and forward vanilla `OnClickH`, `OnEnter`, and `OnLeave` handling to the original `ShipUI.Btn`.

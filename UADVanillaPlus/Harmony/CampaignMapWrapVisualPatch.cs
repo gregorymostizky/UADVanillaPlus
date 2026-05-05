@@ -26,6 +26,9 @@ internal static class CampaignMapWrapVisualPatch
     private const int DynamicCleanupFrameInterval = 300;
     private const int MovementDiagnosticFrameWindow = 900;
     private const int MovementDiagnosticsMaxPerClick = 1;
+    private const int BorderDiagnosticsMaxSamples = 8;
+    private const int SceneBorderDiagnosticsMaxSamples = 10;
+    private const int GenericMeshDiagnosticsMaxSamples = 12;
     private const float RoutingProxyEdgeOffset = 0.05f;
     private const float VisibleSideMapPadding = 1.5f;
 
@@ -36,6 +39,8 @@ internal static class CampaignMapWrapVisualPatch
     private static bool CreatedCountryOverlayCopies;
     private static bool LoggedDynamicMarkerCopies;
     private static bool LoggedRouteCopies;
+    private static bool LoggedMapMaterialCopies;
+    private static bool LoggedBorderDiagnostics;
     private static bool LeftLapVisible;
     private static bool RightLapVisible;
     private static bool LastMapClickWasWrapped;
@@ -265,11 +270,32 @@ internal static class CampaignMapWrapVisualPatch
 
         MeshRenderer copyRenderer = copy.AddComponent<MeshRenderer>();
         copyRenderer.enabled = sourceRenderer.enabled;
-        copyRenderer.sharedMaterial = CreateUnlitTextureMaterial(sourceTexture, $"{copy.name}_Material", MapRenderQueue);
+        copyRenderer.sharedMaterials = CreateMapCopyMaterials(sourceRenderer, sourceTexture, copy.name);
 
         AddMapRaycastCollider(copy, sourceMesh);
 
         RegisterStaticWrapObject(copy, lap);
+    }
+
+    private static Material[] CreateMapCopyMaterials(Renderer sourceRenderer, Texture sourceTexture, string copyName)
+    {
+        Material[] sourceMaterials = sourceRenderer.materials;
+        if (sourceMaterials.Length > 0)
+        {
+            LogMapMaterialCopiesOnce(sourceMaterials.Length);
+            return CloneMaterials(sourceMaterials, copyName, MapRenderQueue);
+        }
+
+        return new[] { CreateUnlitTextureMaterial(sourceTexture, $"{copyName}_Material", MapRenderQueue) };
+    }
+
+    private static void LogMapMaterialCopiesOnce(int materialCount)
+    {
+        if (LoggedMapMaterialCopies)
+            return;
+
+        LoggedMapMaterialCopies = true;
+        Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP map wrap: copying wrapped map surfaces with {materialCount} source material(s).");
     }
 
     private static void AddMapRaycastCollider(GameObject copy, Mesh sourceMesh)
@@ -1387,6 +1413,7 @@ internal static class CampaignMapWrapVisualPatch
 
         CreatedCountryOverlayCopies = true;
         int createdCopies = CreateCountryOverlayCopies(map);
+        LogCountryBorderDiagnostics(map);
         RefreshVisibleSideMaps(Cam.Instance);
         Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP map wrap: copied {createdCopies} country overlay renderers.");
     }
@@ -1483,6 +1510,489 @@ internal static class CampaignMapWrapVisualPatch
 
         RegisterStaticWrapObject(copy, lap);
         return true;
+    }
+
+    private static void LogCountryBorderDiagnostics(CampaignMap map)
+    {
+        if (LoggedBorderDiagnostics)
+            return;
+
+        LoggedBorderDiagnostics = true;
+        CampaignBordersManager? bordersManager = map.bordersManager;
+        if (bordersManager == null)
+        {
+            Melon<UADVanillaPlusMod>.Logger.Msg("UADVP map wrap border diag: manager=no");
+            return;
+        }
+
+        int countryCount = 0;
+        int overlayRendererCount = 0;
+        int highlightRootCount = 0;
+        int highlightRendererCount = 0;
+        int highlightWrapRendererCount = 0;
+        List<string> namedSamples = new();
+        List<string> otherSamples = new();
+
+        int dummyRendererCount = CountRenderers(bordersManager.Dummy);
+        CollectRendererSamples(bordersManager.Dummy, "dummy", otherSamples);
+
+        if (bordersManager.Countries != null)
+        {
+            foreach (CampaignBordersManager.Country country in bordersManager.Countries)
+            {
+                if (country == null)
+                    continue;
+
+                countryCount++;
+                overlayRendererCount += CountMeshRenderers(country.MeshObjects);
+
+                if (country.HighlightMesh == null)
+                    continue;
+
+                highlightRootCount++;
+                int rendererCount = CountRenderers(country.HighlightMesh, true);
+                highlightRendererCount += rendererCount;
+                highlightWrapRendererCount += Math.Max(0, CountRenderers(country.HighlightMesh) - rendererCount);
+            }
+        }
+
+        int mapParentRendererCount = 0;
+        int namedCandidateCount = 0;
+        Transform? mapParent = map.MapRenderer == null ? null : map.MapRenderer.transform.parent;
+        if (mapParent != null)
+        {
+            Renderer[] renderers = mapParent.GetComponentsInChildren<Renderer>(true);
+            mapParentRendererCount = renderers.Length;
+            foreach (Renderer renderer in renderers)
+            {
+                if (renderer == null || renderer == map.MapRenderer || IsDiagnosticExcludedMapLayer(renderer.transform))
+                    continue;
+
+                if (!LooksLikeBorderDiagnosticCandidate(renderer))
+                    continue;
+
+                namedCandidateCount++;
+                AddRendererSample("named", renderer, namedSamples);
+            }
+        }
+
+        string namedSampleText = namedSamples.Count == 0 ? "none" : string.Join(" | ", namedSamples);
+        string otherSampleText = otherSamples.Count == 0 ? "none" : string.Join(" | ", otherSamples);
+        Melon<UADVanillaPlusMod>.Logger.Msg(
+            $"UADVP map wrap border diag: manager=yes countries={countryCount} overlayMeshes={overlayRendererCount} dummyRenderers={dummyRendererCount} highlightRoots={highlightRootCount} highlightRenderers={highlightRendererCount} wrapOverlayChildren={highlightWrapRendererCount} mapParentRenderers={mapParentRendererCount} namedCandidates={namedCandidateCount}; namedSamples={namedSampleText}; otherSamples={otherSampleText}");
+        LogSceneBorderDiagnostics(map);
+        LogGenericMeshDiagnostics(map);
+    }
+
+    private static void LogSceneBorderDiagnostics(CampaignMap map)
+    {
+        Transform? excludedMapParent = map.MapRenderer == null ? null : map.MapRenderer.transform.parent;
+        Renderer[] renderers = UnityEngine.Object.FindObjectsOfType<Renderer>();
+
+        int totalRenderers = 0;
+        int visibleRenderers = 0;
+        int excludedMapRenderers = 0;
+        int excludedVpRenderers = 0;
+        int lineRendererCount = 0;
+        int keywordCandidateCount = 0;
+        List<string> lineSamples = new();
+        List<string> keywordSamples = new();
+
+        foreach (Renderer renderer in renderers)
+        {
+            if (renderer == null)
+                continue;
+
+            totalRenderers++;
+            if (!renderer.enabled || renderer.gameObject == null || !renderer.gameObject.activeInHierarchy)
+                continue;
+
+            visibleRenderers++;
+            Transform transform = renderer.transform;
+            if (IsUadVpGeneratedTransform(transform))
+            {
+                excludedVpRenderers++;
+                continue;
+            }
+
+            if (excludedMapParent != null && IsSameOrChildOf(transform, excludedMapParent))
+            {
+                excludedMapRenderers++;
+                continue;
+            }
+
+            bool isLineRenderer = IsLineRenderer(renderer);
+            bool hasBorderText = RendererHasBorderDiagnosticText(renderer);
+
+            if (isLineRenderer)
+            {
+                lineRendererCount++;
+                AddRendererSample("line", renderer, lineSamples, SceneBorderDiagnosticsMaxSamples);
+            }
+            else if (hasBorderText)
+            {
+                keywordCandidateCount++;
+                AddRendererSample("keyword", renderer, keywordSamples, SceneBorderDiagnosticsMaxSamples);
+            }
+        }
+
+        string lineSampleText = lineSamples.Count == 0 ? "none" : string.Join(" | ", lineSamples);
+        string keywordSampleText = keywordSamples.Count == 0 ? "none" : string.Join(" | ", keywordSamples);
+        Melon<UADVanillaPlusMod>.Logger.Msg(
+            $"UADVP map wrap scene border diag: renderers={totalRenderers} visible={visibleRenderers} excludedMap={excludedMapRenderers} excludedUADVP={excludedVpRenderers} lineCandidates={lineRendererCount} keywordCandidates={keywordCandidateCount}; lineSamples={lineSampleText}; keywordSamples={keywordSampleText}");
+    }
+
+    private static void LogGenericMeshDiagnostics(CampaignMap map)
+    {
+        Transform? mapParent = map.MapRenderer == null ? null : map.MapRenderer.transform.parent;
+        MeshRenderer[] renderers = UnityEngine.Object.FindObjectsOfType<MeshRenderer>();
+
+        int totalMeshRenderers = 0;
+        int visibleMeshRenderers = 0;
+        int mapMeshRenderers = 0;
+        int mapLabelRenderers = 0;
+        int excludedVpRenderers = 0;
+        int nonTextSceneRenderers = 0;
+        List<string> mapSamples = new();
+        List<string> sceneSamples = new();
+
+        foreach (MeshRenderer renderer in renderers)
+        {
+            if (renderer == null)
+                continue;
+
+            totalMeshRenderers++;
+            if (!renderer.enabled || renderer.gameObject == null || !renderer.gameObject.activeInHierarchy)
+                continue;
+
+            visibleMeshRenderers++;
+            Transform transform = renderer.transform;
+            if (IsUadVpGeneratedTransform(transform))
+            {
+                excludedVpRenderers++;
+                continue;
+            }
+
+            if (mapParent != null && IsSameOrChildOf(transform, mapParent))
+            {
+                mapMeshRenderers++;
+                AddRendererSample("mapMesh", renderer, mapSamples, GenericMeshDiagnosticsMaxSamples, true);
+                continue;
+            }
+
+            if (IsMapLabelTransform(transform) || LooksLikeTextRenderer(renderer))
+            {
+                mapLabelRenderers++;
+                continue;
+            }
+
+            nonTextSceneRenderers++;
+            AddRendererSample("sceneMesh", renderer, sceneSamples, GenericMeshDiagnosticsMaxSamples, true);
+        }
+
+        string mapSampleText = mapSamples.Count == 0 ? "none" : string.Join(" | ", mapSamples);
+        string sceneSampleText = sceneSamples.Count == 0 ? "none" : string.Join(" | ", sceneSamples);
+        Melon<UADVanillaPlusMod>.Logger.Msg(
+            $"UADVP map wrap mesh diag: meshRenderers={totalMeshRenderers} visible={visibleMeshRenderers} mapMeshes={mapMeshRenderers} mapLabelText={mapLabelRenderers} excludedUADVP={excludedVpRenderers} nonTextSceneMeshes={nonTextSceneRenderers}; mapSamples={mapSampleText}; sceneSamples={sceneSampleText}");
+    }
+
+    private static int CountMeshRenderers(Il2CppSystem.Collections.Generic.List<MeshRenderer>? renderers)
+    {
+        if (renderers == null)
+            return 0;
+
+        int count = 0;
+        for (int i = 0; i < renderers.Count; i++)
+        {
+            if (renderers[i] != null)
+                count++;
+        }
+
+        return count;
+    }
+
+    private static int CountRenderers(GameObject? root, bool excludeUadVpGenerated = false)
+    {
+        if (root == null)
+            return 0;
+
+        Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
+        int count = 0;
+        foreach (Renderer renderer in renderers)
+        {
+            if (renderer != null && (!excludeUadVpGenerated || !IsUadVpGeneratedTransform(renderer.transform)))
+                count++;
+        }
+
+        return count;
+    }
+
+    private static void CollectRendererSamples(GameObject? root, string label, List<string> samples)
+    {
+        if (root == null || samples.Count >= BorderDiagnosticsMaxSamples)
+            return;
+
+        Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
+        foreach (Renderer renderer in renderers)
+        {
+            if (renderer == null)
+                continue;
+
+            AddRendererSample(label, renderer, samples);
+            if (samples.Count >= BorderDiagnosticsMaxSamples)
+                return;
+        }
+    }
+
+    private static void AddRendererSample(string label, Renderer renderer, List<string> samples)
+    {
+        AddRendererSample(label, renderer, samples, BorderDiagnosticsMaxSamples);
+    }
+
+    private static void AddRendererSample(string label, Renderer renderer, List<string> samples, int maxSamples)
+        => AddRendererSample(label, renderer, samples, maxSamples, false);
+
+    private static void AddRendererSample(string label, Renderer renderer, List<string> samples, int maxSamples, bool includeMaterialDetails)
+    {
+        if (samples.Count >= maxSamples)
+            return;
+
+        string typeName = renderer.GetIl2CppType().Name;
+        string path = ShortObjectPath(renderer.transform);
+        string materialText = includeMaterialDetails ? MaterialDetails(renderer) : $"mats={FirstMaterialNames(renderer)}";
+        samples.Add(
+            $"{label}:{path}<{typeName}> {materialText} active={renderer.gameObject.activeInHierarchy}/{renderer.enabled}");
+    }
+
+    private static bool LooksLikeBorderDiagnosticCandidate(Renderer renderer)
+        => IsLineRenderer(renderer) || RendererHasBorderDiagnosticText(renderer);
+
+    private static bool IsLineRenderer(Renderer renderer)
+        => (renderer.GetIl2CppType().Name ?? string.Empty).Contains("LineRenderer", StringComparison.OrdinalIgnoreCase);
+
+    private static bool RendererHasBorderDiagnosticText(Renderer renderer)
+    {
+        if (LooksLikeBorderDiagnosticText(ShortObjectPath(renderer.transform)))
+            return true;
+
+        Material[] materials = renderer.sharedMaterials;
+        for (int i = 0; i < materials.Length; i++)
+        {
+            string materialName = materials[i] == null ? string.Empty : StripInstanceSuffix(materials[i].name);
+            if (LooksLikeBorderDiagnosticText(materialName))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool LooksLikeBorderDiagnosticText(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return false;
+
+        return text.Contains("border", StringComparison.OrdinalIgnoreCase) ||
+               text.Contains("outline", StringComparison.OrdinalIgnoreCase) ||
+               text.Contains("frontier", StringComparison.OrdinalIgnoreCase) ||
+               text.Contains("state", StringComparison.OrdinalIgnoreCase) ||
+               text.Contains("province", StringComparison.OrdinalIgnoreCase) ||
+               text.Contains("region", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool LooksLikeTextRenderer(Renderer renderer)
+    {
+        string path = ShortObjectPath(renderer.transform);
+        if (path.Contains("MapLabels", StringComparison.OrdinalIgnoreCase) ||
+            path.Contains("TextMeshPro", StringComparison.OrdinalIgnoreCase) ||
+            path.Contains("TMP", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        Material[] materials = renderer.sharedMaterials;
+        for (int i = 0; i < materials.Length; i++)
+        {
+            string materialName = materials[i] == null ? string.Empty : StripInstanceSuffix(materials[i].name);
+            if (materialName.Contains("SDF", StringComparison.OrdinalIgnoreCase) ||
+                materialName.Contains("Font", StringComparison.OrdinalIgnoreCase) ||
+                materialName.Contains("NotoSans", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsMapLabelTransform(Transform? transform)
+    {
+        while (transform != null)
+        {
+            string name = transform.name ?? string.Empty;
+            if (name.Contains("MapLabels", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            transform = transform.parent;
+        }
+
+        return false;
+    }
+
+    private static bool IsDiagnosticExcludedMapLayer(Transform? transform)
+    {
+        while (transform != null)
+        {
+            string name = transform.name ?? string.Empty;
+            if (IsUadVpGeneratedTransform(transform) ||
+                name.Equals("BorderLeft", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("BorderRight", StringComparison.OrdinalIgnoreCase) ||
+                name.Contains("MapVisualGrid", StringComparison.OrdinalIgnoreCase) ||
+                name.Contains("Labels", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            transform = transform.parent;
+        }
+
+        return false;
+    }
+
+    private static bool IsUadVpGeneratedTransform(Transform? transform)
+    {
+        while (transform != null)
+        {
+            string name = transform.name ?? string.Empty;
+            if (name.StartsWith("UADVP_", StringComparison.Ordinal))
+                return true;
+
+            transform = transform.parent;
+        }
+
+        return false;
+    }
+
+    private static bool IsSameOrChildOf(Transform? transform, Transform root)
+    {
+        while (transform != null)
+        {
+            if (transform == root)
+                return true;
+
+            transform = transform.parent;
+        }
+
+        return false;
+    }
+
+    private static string FirstMaterialNames(Renderer renderer)
+    {
+        Material[] materials = renderer.sharedMaterials;
+        if (materials.Length == 0)
+            return "none";
+
+        List<string> names = new();
+        for (int i = 0; i < materials.Length && names.Count < 2; i++)
+        {
+            if (materials[i] != null)
+                names.Add(ShortenForLog(StripInstanceSuffix(materials[i].name), 36));
+        }
+
+        if (names.Count == 0)
+            return "none";
+
+        string suffix = materials.Length > names.Count ? $"+{materials.Length - names.Count}" : string.Empty;
+        return string.Join("+", names) + suffix;
+    }
+
+    private static string MaterialDetails(Renderer renderer)
+    {
+        Material[] materials = renderer.sharedMaterials;
+        if (materials.Length == 0)
+            return "mats=none";
+
+        List<string> details = new();
+        for (int i = 0; i < materials.Length && details.Count < 2; i++)
+        {
+            Material material = materials[i];
+            if (material == null)
+                continue;
+
+            string materialName = ShortenForLog(StripInstanceSuffix(material.name), 32);
+            string shaderName = ShortenForLog(material.shader == null ? "noShader" : material.shader.name, 40);
+            string textureName = ShortenForLog(FirstKnownTextureName(material), 36);
+            details.Add($"{materialName}|shader={shaderName}|q={material.renderQueue}|tex={textureName}");
+        }
+
+        if (details.Count == 0)
+            return "mats=none";
+
+        string suffix = materials.Length > details.Count ? $"+{materials.Length - details.Count}" : string.Empty;
+        return "mats=" + string.Join("+", details) + suffix;
+    }
+
+    private static string FirstKnownTextureName(Material material)
+    {
+        string[] textureProperties =
+        {
+            "_MainTex",
+            "_BaseMap",
+            "_BumpMap",
+            "_DetailAlbedoMap",
+            "_MaskTex",
+            "_BorderTex",
+            "_LineTex"
+        };
+
+        foreach (string property in textureProperties)
+        {
+            if (!material.HasProperty(property))
+                continue;
+
+            Texture texture = material.GetTexture(property);
+            if (texture != null && !string.IsNullOrWhiteSpace(texture.name))
+                return $"{property}:{texture.name}";
+        }
+
+        return "none";
+    }
+
+    private static string ShortObjectPath(Transform? transform)
+    {
+        if (transform == null)
+            return "null";
+
+        List<string> parts = new();
+        while (transform != null)
+        {
+            parts.Add(SafeLogName(transform.name));
+            transform = transform.parent;
+        }
+
+        parts.Reverse();
+        int start = Math.Max(0, parts.Count - 5);
+        List<string> tail = parts.GetRange(start, parts.Count - start);
+        string path = string.Join("/", tail);
+        if (start > 0)
+            path = ".../" + path;
+
+        return ShortenForLog(path, 140);
+    }
+
+    private static string SafeLogName(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "unnamed";
+
+        return value.Replace(" ", "_");
+    }
+
+    private static string ShortenForLog(string value, int maxLength)
+    {
+        if (value.Length <= maxLength)
+            return value;
+
+        return value[..Math.Max(0, maxLength - 3)] + "...";
     }
 
     private static Material[] CloneMaterials(Material[] sourceMaterials, string copyName, int minimumRenderQueue)
@@ -1623,6 +2133,8 @@ internal static class CampaignMapWrapVisualPatch
         CreatedCountryOverlayCopies = false;
         LoggedDynamicMarkerCopies = false;
         LoggedRouteCopies = false;
+        LoggedMapMaterialCopies = false;
+        LoggedBorderDiagnostics = false;
         LeftLapVisible = false;
         RightLapVisible = false;
         LastOverlayAttemptFrame = 0;
