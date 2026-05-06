@@ -266,15 +266,15 @@ internal static class CampaignFleetWindowDesignViewerPatch
 
     private static void RebuildDesignViewerToolbarIfNeeded()
     {
-        // Rebuild only when the campaign player set changes; refreshing the
-        // Designs tab itself should just update selection state and row data.
+        // Rebuild only when the campaign/player identity changes; refreshing
+        // the Designs tab itself should just update selection state and row data.
         if (designViewerToolbar == null)
             return;
 
         List<Player> players = GetDesignViewerPlayers();
-        string signature = string.Join("|", players.Select(p => p?.data?.name ?? p?.Name(false) ?? "?"));
-        bool hasMissingButton = DesignViewerFlagButtons.Values.Any(button => button == null);
-        if (designViewerToolbarSignature == signature && DesignViewerFlagButtons.Count == players.Count && !hasMissingButton)
+        string signature = BuildDesignViewerToolbarSignature(players);
+        bool hasStaleButton = DesignViewerFlagButtons.Values.Any(button => button == null || button.transform == null || button.transform.parent != designViewerToolbar.transform);
+        if (designViewerToolbarSignature == signature && DesignViewerFlagButtons.Count == players.Count && !hasStaleButton)
             return;
 
         foreach (GameObject child in designViewerToolbar.GetChildren())
@@ -312,7 +312,7 @@ internal static class CampaignFleetWindowDesignViewerPatch
             Button button = flagButton.AddComponent<Button>();
             button.targetGraphic = background;
             Player capturedPlayer = player;
-            button.onClick.AddListener(new System.Action(() => SetDesignViewerPlayer(capturedPlayer)));
+            button.onClick.AddListener(new System.Action(() => OnDesignViewerFlagClicked(capturedPlayer)));
 
             GameObject flagImageObject = new("UADVP_FlagImage");
             flagImageObject.AddComponent<RectTransform>();
@@ -355,6 +355,65 @@ internal static class CampaignFleetWindowDesignViewerPatch
             toolbarRect.sizeDelta = new Vector2(toolbarRect.sizeDelta.x, ToolbarStripHeight);
 
         designViewerToolbarSignature = signature;
+        Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP design viewer: rebuilt nation selector for {players.Count} player(s); campaign={RuntimeObjectKey(CampaignController.Instance)}.");
+    }
+
+    private static string BuildDesignViewerToolbarSignature(List<Player> players)
+    {
+        string campaignKey = RuntimeObjectKey(CampaignController.Instance);
+        string playerKeys = string.Join("|", players.Select(p => $"{PlayerKey(p)}@{RuntimeObjectKey(p)}"));
+        return $"{campaignKey}:{playerKeys}";
+    }
+
+    private static string PlayerKey(Player player)
+    {
+        if (player == null)
+            return "<null>";
+
+        try
+        {
+            return player.data?.name ?? player.Name(false) ?? "<unknown>";
+        }
+        catch
+        {
+            return "<unprintable>";
+        }
+    }
+
+    private static string PlayerLabel(Player player)
+    {
+        if (player == null)
+            return "<null>";
+
+        try
+        {
+            return player.Name(false);
+        }
+        catch
+        {
+            return PlayerKey(player);
+        }
+    }
+
+    private static string RuntimeObjectKey(object value)
+    {
+        if (value == null)
+            return "null";
+
+        try
+        {
+            return value switch
+            {
+                CampaignController campaign => campaign.Pointer.ToString(),
+                Player player => player.Pointer.ToString(),
+                GameObject gameObject => gameObject.GetInstanceID().ToString(),
+                _ => value.GetHashCode().ToString("X"),
+            };
+        }
+        catch
+        {
+            return "unknown";
+        }
     }
 
     private static void UpdateDesignViewerFlagSizes(CampaignFleetWindow window)
@@ -405,10 +464,26 @@ internal static class CampaignFleetWindowDesignViewerPatch
     private static void SetDesignViewerPlayer(Player player)
         => SetDesignViewerPlayer(G.ui?.FleetWindow, player);
 
+    private static void OnDesignViewerFlagClicked(Player player)
+    {
+        Melon<UADVanillaPlusMod>.Logger.Msg(
+            $"UADVP design viewer: flag clicked {PlayerLabel(GetCurrentDesignViewerPlayer())} -> {PlayerLabel(player)}; campaign={RuntimeObjectKey(CampaignController.Instance)}.");
+        SetDesignViewerPlayer(player);
+    }
+
     private static void SetDesignViewerPlayer(CampaignFleetWindow window, Player player)
     {
         if (window == null || player == null || !HasDesignTab(window))
             return;
+
+        if (!GetDesignViewerPlayers().Contains(player))
+        {
+            Melon<UADVanillaPlusMod>.Logger.Warning($"UADVP design viewer: ignored stale nation selector target {PlayerLabel(player)}; rebuilding selector.");
+            designViewerToolbarSignature = string.Empty;
+            RebuildDesignViewerToolbarIfNeeded();
+            UpdateDesignViewerToolbar();
+            return;
+        }
 
         designViewerPlayer = player;
         UpdateDesignViewerToolbar();
