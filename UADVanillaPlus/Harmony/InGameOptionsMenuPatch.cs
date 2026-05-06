@@ -34,6 +34,7 @@ internal static class InGameOptionsMenuPatch
     private const string CampaignMapWraparoundOptionName = "UADVP_Option_CampaignMapWraparound";
     private const string CanalOpeningsOptionName = "UADVP_Option_CanalOpenings";
     private const string TechnologySpreadOptionName = "UADVP_Option_TechnologySpread";
+    private const string CampaignEndDateOptionName = "UADVP_Option_CampaignEndDate";
     private const string MineWarfareOptionName = "UADVP_Option_MineWarfare";
     private const string SubmarineWarfareOptionName = "UADVP_Option_SubmarineWarfare";
 
@@ -327,6 +328,14 @@ internal static class InGameOptionsMenuPatch
                     ("Unrestricted", ModSettings.TechnologySpread == ModSettings.TechnologySpreadMode.Unrestricted, () => SetTechnologySpreadMode(ModSettings.TechnologySpreadMode.Unrestricted)));
                 AddSegmentedOption(
                     pane.transform,
+                    CampaignEndDateOptionName,
+                    "Campaign End Date",
+                    "Enabled keeps vanilla's forced retirement at 1965. Disabled suppresses the vanilla retirement popup and finish call so campaigns can continue past 1965; other campaign-ending conditions still apply.",
+                    true,
+                    ("Disabled", !ModSettings.CampaignEndDateEnabled, () => SetCampaignEndDateMode(false)),
+                    ("Enabled", ModSettings.CampaignEndDateEnabled, () => SetCampaignEndDateMode(true)));
+                AddSegmentedOption(
+                    pane.transform,
                     MineWarfareOptionName,
                     "Mine Warfare",
                     "Disabled prevents minefield damage and hides mine and minesweeping equipment from the ship designer. Enabled keeps the game's normal minefields and mine equipment.",
@@ -571,6 +580,15 @@ internal static class InGameOptionsMenuPatch
         RefreshLauncherButton();
     }
 
+    private static void SetCampaignEndDateMode(bool enabled)
+    {
+        if (ModSettings.CampaignEndDateEnabled != enabled)
+            ModSettings.CampaignEndDateEnabled = enabled;
+
+        RefreshMenu();
+        RefreshLauncherButton();
+    }
+
     private static void SetMineWarfareMode(bool disabled)
     {
         if (ModSettings.MineWarfareDisabled != disabled)
@@ -714,12 +732,12 @@ internal static class InGameOptionsMenuPatch
     }
 
     private static bool AnyBalanceOptionEnabled()
-        => ModSettings.BattleWeatherAlwaysSunny || ModSettings.DesignAccuracyPenaltiesBalanced || ModSettings.PortStrikeBalanced || ModSettings.MajorShipTorpedoesRestricted || ModSettings.ObsoleteDesignRetentionEnabled || ModSettings.ShipyardCapacityBalanced || ModSettings.EarlyCanalOpeningsEnabled || ModSettings.TechnologySpread != ModSettings.TechnologySpreadMode.Vanilla || ModSettings.MineWarfareDisabled || ModSettings.SubmarineWarfareDisabled || ModSettings.CampaignMapWraparoundEnabled;
+        => ModSettings.BattleWeatherAlwaysSunny || ModSettings.DesignAccuracyPenaltiesBalanced || ModSettings.PortStrikeBalanced || ModSettings.MajorShipTorpedoesRestricted || ModSettings.ObsoleteDesignRetentionEnabled || ModSettings.ShipyardCapacityBalanced || ModSettings.EarlyCanalOpeningsEnabled || ModSettings.TechnologySpread != ModSettings.TechnologySpreadMode.Vanilla || !ModSettings.CampaignEndDateEnabled || ModSettings.MineWarfareDisabled || ModSettings.SubmarineWarfareDisabled || ModSettings.CampaignMapWraparoundEnabled;
 
     private static void AddLauncherTooltip(GameObject buttonObject)
         => AddTooltip(
             buttonObject,
-            $"UAD:VP Options\nBattle Weather: {BattleWeatherModeText(ModSettings.BattleWeatherAlwaysSunny)}\nAccuracy Penalties: {DesignAccuracyPenaltiesModeText(ModSettings.DesignAccuracyPenaltyMode)}\nPort Strike: {PortStrikeModeText(ModSettings.PortStrikeBalanced)}\nSuspend Dock Overcapacity: {ShipyardCapacityModeText(ModSettings.ShipyardCapacityBalanced)}\nCanal Openings: {CanalOpeningModeText(ModSettings.EarlyCanalOpeningsEnabled)}\nTechnology Spread: {TechnologySpreadModeText(ModSettings.TechnologySpread)}\nMine Warfare: {MineWarfareModeText(ModSettings.MineWarfareDisabled)}\nSubmarine Warfare: {SubmarineWarfareModeText(ModSettings.SubmarineWarfareDisabled)}\nCA+ Torpedoes: {MajorShipTorpedoesModeText(ModSettings.MajorShipTorpedoesRestricted)}\nObsolete Tech & Hulls: {ObsoleteDesignRetentionModeText(ModSettings.ObsoleteDesignRetentionEnabled)}\nMap Geometry: {CampaignMapWraparoundModeText(ModSettings.CampaignMapWraparoundEnabled)}",
+            $"UAD:VP Options\nBattle Weather: {BattleWeatherModeText(ModSettings.BattleWeatherAlwaysSunny)}\nAccuracy Penalties: {DesignAccuracyPenaltiesModeText(ModSettings.DesignAccuracyPenaltyMode)}\nPort Strike: {PortStrikeModeText(ModSettings.PortStrikeBalanced)}\nSuspend Dock Overcapacity: {ShipyardCapacityModeText(ModSettings.ShipyardCapacityBalanced)}\nCanal Openings: {CanalOpeningModeText(ModSettings.EarlyCanalOpeningsEnabled)}\nTechnology Spread: {TechnologySpreadModeText(ModSettings.TechnologySpread)}\nCampaign End Date: {CampaignEndDateModeText(ModSettings.CampaignEndDateEnabled)}\nMine Warfare: {MineWarfareModeText(ModSettings.MineWarfareDisabled)}\nSubmarine Warfare: {SubmarineWarfareModeText(ModSettings.SubmarineWarfareDisabled)}\nCA+ Torpedoes: {MajorShipTorpedoesModeText(ModSettings.MajorShipTorpedoesRestricted)}\nObsolete Tech & Hulls: {ObsoleteDesignRetentionModeText(ModSettings.ObsoleteDesignRetentionEnabled)}\nMap Geometry: {CampaignMapWraparoundModeText(ModSettings.CampaignMapWraparoundEnabled)}",
             () => launcherButton != null && launcherButton.interactable);
 
     private static void AddTooltip(GameObject target, string text, Func<bool>? canShow = null)
@@ -776,7 +794,7 @@ internal static class InGameOptionsMenuPatch
         rect.anchorMax = new Vector2(0.5f, 0.5f);
         rect.pivot = new Vector2(0.5f, 0.5f);
         rect.anchoredPosition = Vector2.zero;
-        rect.sizeDelta = new Vector2(980f, 390f);
+        rect.sizeDelta = new Vector2(980f, 450f);
     }
 
     private static void MatchButtonSizing(GameObject target, GameObject template)
@@ -896,6 +914,9 @@ internal static class InGameOptionsMenuPatch
 
     private static string TechnologySpreadModeText(ModSettings.TechnologySpreadMode mode)
         => ModSettings.TechnologySpreadModeText(mode);
+
+    private static string CampaignEndDateModeText(bool enabled)
+        => ModSettings.CampaignEndDateModeText(enabled);
 
     private static string MineWarfareModeText(bool disabled)
         => ModSettings.MineWarfareModeText(disabled);

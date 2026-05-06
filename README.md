@@ -2,7 +2,7 @@
 
 UAD Vanilla Plus (`UAD:VP`) is a lightweight mod for Ultimate Admiral: Dreadnoughts that keeps the base game feel while adding small quality-of-life improvements.
 
-Current version: `0.2.59`
+Current version: `0.3.0`
 
 ## Philosophy
 
@@ -49,6 +49,7 @@ Start the game normally after copying the DLL. If the mod loads, `UAD:VP` and th
 - **Suspend Dock Overcapacity**: automatically delays lower-priority repairs, builds, and refits when monthly dock work exceeds shipyard capacity; manual mode keeps vanilla overcapacity handling.
 - **Canal openings**: optional setting to open the Panama and Kiel canals from 1890 when a campaign map loads, matching early-campaign canals such as Suez; historical mode keeps vanilla's 1914 and 1895 opening years.
 - **Technology Spread**: optional `Gradual`, `Swift`, and `Unrestricted` modes that help major nations catch up faster in research categories where they trail the current leader. This defaults to vanilla.
+- **Campaign End Date**: optional setting to disable vanilla's forced 1965 retirement so campaigns can continue past the normal end date. This defaults to enabled.
 - **Mine Warfare**: optional setting to disable minefield damage in existing campaigns and hide mine and minesweeping equipment from the ship designer. This defaults to enabled.
 - **Submarine Warfare**: optional setting to disable submarine construction and submarine campaign battles while leaving existing submarines in saved campaigns untouched. This defaults to enabled.
 

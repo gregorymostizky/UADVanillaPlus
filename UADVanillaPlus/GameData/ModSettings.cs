@@ -19,6 +19,7 @@ internal static class ModSettings
     private const string CampaignMapWraparoundEnabledKey = "uadvp_campaign_map_wraparound_enabled";
     private const string EarlyCanalOpeningsEnabledKey = "uadvp_early_canal_openings_enabled";
     private const string TechnologySpreadModeKey = "uadvp_technology_spread_mode";
+    private const string CampaignEndDateEnabledKey = "uadvp_campaign_end_date_enabled";
     private const string OldPanamaCanalEarlyEnabledKey = "uadvp_panama_canal_early_enabled";
 
     private static bool? portStrikeBalanced;
@@ -32,6 +33,7 @@ internal static class ModSettings
     private static bool? campaignMapWraparoundEnabled;
     private static bool? earlyCanalOpeningsEnabled;
     private static TechnologySpreadMode? technologySpreadMode;
+    private static bool? campaignEndDateEnabled;
 
     internal enum AccuracyPenaltyMode
     {
@@ -199,6 +201,19 @@ internal static class ModSettings
         }
     }
 
+    internal static bool CampaignEndDateEnabled
+    {
+        get => campaignEndDateEnabled ??= PlayerPrefs.GetInt(CampaignEndDateEnabledKey, 1) != 0;
+        set
+        {
+            campaignEndDateEnabled = value;
+            PlayerPrefs.SetInt(CampaignEndDateEnabledKey, value ? 1 : 0);
+            PlayerPrefs.Save();
+            Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP option: Campaign End Date mode {CampaignEndDateModeText(value)}.");
+            LogCurrentSettings("after Campaign End Date change");
+        }
+    }
+
     internal static bool DesignAccuracyPenaltiesBalanced
         => DesignAccuracyPenaltyMode != AccuracyPenaltyMode.Vanilla;
 
@@ -220,6 +235,7 @@ internal static class ModSettings
            $"Suspend Dock Overcapacity={ShipyardCapacityModeText(ShipyardCapacityBalanced)}; " +
            $"Canal Openings={CanalOpeningModeText(EarlyCanalOpeningsEnabled)}; " +
            $"Technology Spread={TechnologySpreadModeText(TechnologySpread)}; " +
+           $"Campaign End Date={CampaignEndDateModeText(CampaignEndDateEnabled)}; " +
            $"Mine Warfare={MineWarfareModeText(MineWarfareDisabled)}; " +
            $"Submarine Warfare={SubmarineWarfareModeText(SubmarineWarfareDisabled)}; " +
            $"CA+ Torpedoes={MajorShipTorpedoesModeText(MajorShipTorpedoesRestricted)}; " +
@@ -261,6 +277,9 @@ internal static class ModSettings
             TechnologySpreadMode.Unrestricted => "Unrestricted",
             _ => "Vanilla",
         };
+
+    internal static string CampaignEndDateModeText(bool enabled)
+        => enabled ? "Enabled" : "Disabled";
 
     private static AccuracyPenaltyMode LoadAccuracyPenaltyMode()
     {
