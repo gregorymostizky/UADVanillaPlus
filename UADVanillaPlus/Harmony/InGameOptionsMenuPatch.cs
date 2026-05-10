@@ -30,6 +30,7 @@ internal static class InGameOptionsMenuPatch
     private const string PortStrikeOptionName = "UADVP_Option_PortStrike";
     private const string MajorShipTorpedoesOptionName = "UADVP_Option_MajorShipTorpedoes";
     private const string ObsoleteDesignRetentionOptionName = "UADVP_Option_ObsoleteDesignRetention";
+    private const string SuperstructureRefitsOptionName = "UADVP_Option_SuperstructureRefits";
     private const string ShipyardCapacityOptionName = "UADVP_Option_ShipyardCapacity";
     private const string CampaignMapWraparoundOptionName = "UADVP_Option_CampaignMapWraparound";
     private const string CanalOpeningsOptionName = "UADVP_Option_CanalOpenings";
@@ -37,6 +38,7 @@ internal static class InGameOptionsMenuPatch
     private const string CampaignEndDateOptionName = "UADVP_Option_CampaignEndDate";
     private const string MineWarfareOptionName = "UADVP_Option_MineWarfare";
     private const string SubmarineWarfareOptionName = "UADVP_Option_SubmarineWarfare";
+    private const string ExperimentalNationShipPaintsOptionName = "UADVP_Option_ExperimentalNationShipPaints";
 
     private static readonly Color Background = new(0f, 0f, 0f, 0.94f);
     private static readonly Color RowBackground = new(0.09f, 0.09f, 0.09f, 0.96f);
@@ -368,6 +370,14 @@ internal static class InGameOptionsMenuPatch
                     true,
                     ("Retain", ModSettings.ObsoleteDesignRetentionEnabled, () => SetObsoleteDesignRetentionMode(true)),
                     ("Vanilla", !ModSettings.ObsoleteDesignRetentionEnabled, () => SetObsoleteDesignRetentionMode(false)));
+                AddSegmentedOption(
+                    pane.transform,
+                    SuperstructureRefitsOptionName,
+                    "Superstructure Refits",
+                    "Enabled is an experimental player-only fallback for researched main towers, secondary towers, and funnels when vanilla only blocks exact hull-era compatibility. Tech, country, ship class group, mount count, and placement checks remain vanilla.",
+                    true,
+                    ("Enabled", ModSettings.SuperstructureRefitsEnabled, () => SetSuperstructureRefitsMode(true)),
+                    ("Vanilla", !ModSettings.SuperstructureRefitsEnabled, () => SetSuperstructureRefitsMode(false)));
                 break;
             case Section.Experimental:
                 AddSegmentedOption(
@@ -378,6 +388,14 @@ internal static class InGameOptionsMenuPatch
                     true,
                     ("Disc World", ModSettings.CampaignMapWraparoundEnabled, () => SetCampaignMapWraparoundMode(true)),
                     ("Flat Earth", !ModSettings.CampaignMapWraparoundEnabled, () => SetCampaignMapWraparoundMode(false)));
+                AddSegmentedOption(
+                    pane.transform,
+                    ExperimentalNationShipPaintsOptionName,
+                    "Experimental Nation Ship Paints",
+                    "Enabled applies experimental nation-themed ship paint schemes in designer previews and battles. Visual style and battle-load performance are still being tuned. Vanilla keeps the game's original ship materials.",
+                    true,
+                    ("Enabled", ModSettings.ExperimentalNationShipPaintsEnabled, () => SetExperimentalNationShipPaintsMode(true)),
+                    ("Vanilla", !ModSettings.ExperimentalNationShipPaintsEnabled, () => SetExperimentalNationShipPaintsMode(false)));
                 break;
         }
     }
@@ -535,6 +553,18 @@ internal static class InGameOptionsMenuPatch
         RefreshLauncherButton();
     }
 
+    private static void SetSuperstructureRefitsMode(bool enabled)
+    {
+        if (ModSettings.SuperstructureRefitsEnabled != enabled)
+        {
+            ModSettings.SuperstructureRefitsEnabled = enabled;
+            RefreshConstructorAvailabilityUi("Superstructure Refits");
+        }
+
+        RefreshMenu();
+        RefreshLauncherButton();
+    }
+
     private static void SetShipyardCapacityMode(bool balanced)
     {
         if (ModSettings.ShipyardCapacityBalanced != balanced)
@@ -553,6 +583,18 @@ internal static class InGameOptionsMenuPatch
         {
             ModSettings.CampaignMapWraparoundEnabled = enabled;
             CampaignMapWrapVisualPatch.ApplyCurrentSetting();
+        }
+
+        RefreshMenu();
+        RefreshLauncherButton();
+    }
+
+    private static void SetExperimentalNationShipPaintsMode(bool enabled)
+    {
+        if (ModSettings.ExperimentalNationShipPaintsEnabled != enabled)
+        {
+            ModSettings.ExperimentalNationShipPaintsEnabled = enabled;
+            DesignHullColorProofPatch.ApplyCurrentSetting();
         }
 
         RefreshMenu();
@@ -732,12 +774,12 @@ internal static class InGameOptionsMenuPatch
     }
 
     private static bool AnyBalanceOptionEnabled()
-        => ModSettings.BattleWeatherAlwaysSunny || ModSettings.DesignAccuracyPenaltiesBalanced || ModSettings.PortStrikeBalanced || ModSettings.MajorShipTorpedoesRestricted || ModSettings.ObsoleteDesignRetentionEnabled || ModSettings.ShipyardCapacityBalanced || ModSettings.EarlyCanalOpeningsEnabled || ModSettings.TechnologySpread != ModSettings.TechnologySpreadMode.Vanilla || !ModSettings.CampaignEndDateEnabled || ModSettings.MineWarfareDisabled || ModSettings.SubmarineWarfareDisabled || ModSettings.CampaignMapWraparoundEnabled;
+        => ModSettings.BattleWeatherAlwaysSunny || ModSettings.DesignAccuracyPenaltiesBalanced || ModSettings.PortStrikeBalanced || ModSettings.MajorShipTorpedoesRestricted || ModSettings.ObsoleteDesignRetentionEnabled || ModSettings.SuperstructureRefitsEnabled || ModSettings.ShipyardCapacityBalanced || ModSettings.EarlyCanalOpeningsEnabled || ModSettings.TechnologySpread != ModSettings.TechnologySpreadMode.Vanilla || !ModSettings.CampaignEndDateEnabled || ModSettings.MineWarfareDisabled || ModSettings.SubmarineWarfareDisabled || ModSettings.CampaignMapWraparoundEnabled || ModSettings.ExperimentalNationShipPaintsEnabled;
 
     private static void AddLauncherTooltip(GameObject buttonObject)
         => AddTooltip(
             buttonObject,
-            $"UAD:VP Options\nBattle Weather: {BattleWeatherModeText(ModSettings.BattleWeatherAlwaysSunny)}\nAccuracy Penalties: {DesignAccuracyPenaltiesModeText(ModSettings.DesignAccuracyPenaltyMode)}\nPort Strike: {PortStrikeModeText(ModSettings.PortStrikeBalanced)}\nSuspend Dock Overcapacity: {ShipyardCapacityModeText(ModSettings.ShipyardCapacityBalanced)}\nCanal Openings: {CanalOpeningModeText(ModSettings.EarlyCanalOpeningsEnabled)}\nTechnology Spread: {TechnologySpreadModeText(ModSettings.TechnologySpread)}\nCampaign End Date: {CampaignEndDateModeText(ModSettings.CampaignEndDateEnabled)}\nMine Warfare: {MineWarfareModeText(ModSettings.MineWarfareDisabled)}\nSubmarine Warfare: {SubmarineWarfareModeText(ModSettings.SubmarineWarfareDisabled)}\nCA+ Torpedoes: {MajorShipTorpedoesModeText(ModSettings.MajorShipTorpedoesRestricted)}\nObsolete Tech & Hulls: {ObsoleteDesignRetentionModeText(ModSettings.ObsoleteDesignRetentionEnabled)}\nMap Geometry: {CampaignMapWraparoundModeText(ModSettings.CampaignMapWraparoundEnabled)}",
+            $"UAD:VP Options\nBattle Weather: {BattleWeatherModeText(ModSettings.BattleWeatherAlwaysSunny)}\nAccuracy Penalties: {DesignAccuracyPenaltiesModeText(ModSettings.DesignAccuracyPenaltyMode)}\nPort Strike: {PortStrikeModeText(ModSettings.PortStrikeBalanced)}\nSuspend Dock Overcapacity: {ShipyardCapacityModeText(ModSettings.ShipyardCapacityBalanced)}\nCanal Openings: {CanalOpeningModeText(ModSettings.EarlyCanalOpeningsEnabled)}\nTechnology Spread: {TechnologySpreadModeText(ModSettings.TechnologySpread)}\nCampaign End Date: {CampaignEndDateModeText(ModSettings.CampaignEndDateEnabled)}\nMine Warfare: {MineWarfareModeText(ModSettings.MineWarfareDisabled)}\nSubmarine Warfare: {SubmarineWarfareModeText(ModSettings.SubmarineWarfareDisabled)}\nCA+ Torpedoes: {MajorShipTorpedoesModeText(ModSettings.MajorShipTorpedoesRestricted)}\nObsolete Tech & Hulls: {ObsoleteDesignRetentionModeText(ModSettings.ObsoleteDesignRetentionEnabled)}\nSuperstructure Refits: {SuperstructureRefitsModeText(ModSettings.SuperstructureRefitsEnabled)}\nMap Geometry: {CampaignMapWraparoundModeText(ModSettings.CampaignMapWraparoundEnabled)}\nExperimental Nation Ship Paints: {ExperimentalNationShipPaintsModeText(ModSettings.ExperimentalNationShipPaintsEnabled)}",
             () => launcherButton != null && launcherButton.interactable);
 
     private static void AddTooltip(GameObject target, string text, Func<bool>? canShow = null)
@@ -906,6 +948,9 @@ internal static class InGameOptionsMenuPatch
     private static string ObsoleteDesignRetentionModeText(bool enabled)
         => enabled ? "Retain" : "Vanilla";
 
+    private static string SuperstructureRefitsModeText(bool enabled)
+        => ModSettings.SuperstructureRefitsModeText(enabled);
+
     private static string ShipyardCapacityModeText(bool balanced)
         => balanced ? "Automatic" : "Manual";
 
@@ -926,6 +971,9 @@ internal static class InGameOptionsMenuPatch
 
     private static string CampaignMapWraparoundModeText(bool enabled)
         => enabled ? "Disc World" : "Flat Earth";
+
+    private static string ExperimentalNationShipPaintsModeText(bool enabled)
+        => ModSettings.ExperimentalNationShipPaintsModeText(enabled);
 
     private static void SetMenuButtonText(GameObject buttonObject, string text)
     {

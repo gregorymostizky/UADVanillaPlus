@@ -1279,8 +1279,17 @@ internal static class CampaignMapWrapVisualPatch
     private static void SyncDynamicCloneVisuals(GameObject copy, GameObject source, float xOffset)
     {
         SyncDynamicCloneGraphics(copy, source);
+        SyncTaskForceTonnageIndicatorClone(copy, source);
         SyncDynamicCloneTextLayout(copy, source);
         SyncDynamicCloneLineRenderers(copy, source, xOffset);
+    }
+
+    private static void SyncTaskForceTonnageIndicatorClone(GameObject copy, GameObject source)
+    {
+        ShipUI? sourceShip = source.GetComponent<ShipUI>();
+        ShipUI? copyShip = copy.GetComponent<ShipUI>();
+        if (sourceShip != null && copyShip != null)
+            CampaignTaskForceTonnageIndicatorPatch.SyncWrappedClone(sourceShip, copyShip);
     }
 
     private static void SyncDynamicCloneGraphics(GameObject copy, GameObject source)

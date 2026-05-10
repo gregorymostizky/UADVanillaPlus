@@ -13,6 +13,7 @@ internal static class ModSettings
     private const string DesignAccuracyPenaltyModeKey = "uadvp_design_accuracy_penalty_mode";
     private const string MajorShipTorpedoesRestrictedKey = "uadvp_major_ship_torpedoes_restricted";
     private const string ObsoleteDesignRetentionEnabledKey = "uadvp_obsolete_design_retention_enabled";
+    private const string SuperstructureRefitsEnabledKey = "uadvp_superstructure_refits_enabled";
     private const string ShipyardCapacityBalancedKey = "uadvp_shipyard_capacity_balanced";
     private const string MineWarfareDisabledKey = "uadvp_mine_warfare_disabled";
     private const string SubmarineWarfareDisabledKey = "uadvp_submarine_warfare_disabled";
@@ -20,6 +21,7 @@ internal static class ModSettings
     private const string EarlyCanalOpeningsEnabledKey = "uadvp_early_canal_openings_enabled";
     private const string TechnologySpreadModeKey = "uadvp_technology_spread_mode";
     private const string CampaignEndDateEnabledKey = "uadvp_campaign_end_date_enabled";
+    private const string ExperimentalNationShipPaintsEnabledKey = "uadvp_experimental_nation_ship_paints_enabled";
     private const string OldPanamaCanalEarlyEnabledKey = "uadvp_panama_canal_early_enabled";
 
     private static bool? portStrikeBalanced;
@@ -27,6 +29,7 @@ internal static class ModSettings
     private static AccuracyPenaltyMode? designAccuracyPenaltyMode;
     private static bool? majorShipTorpedoesRestricted;
     private static bool? obsoleteDesignRetentionEnabled;
+    private static bool? superstructureRefitsEnabled;
     private static bool? shipyardCapacityBalanced;
     private static bool? mineWarfareDisabled;
     private static bool? submarineWarfareDisabled;
@@ -34,6 +37,7 @@ internal static class ModSettings
     private static bool? earlyCanalOpeningsEnabled;
     private static TechnologySpreadMode? technologySpreadMode;
     private static bool? campaignEndDateEnabled;
+    private static bool? experimentalNationShipPaintsEnabled;
 
     internal enum AccuracyPenaltyMode
     {
@@ -120,6 +124,19 @@ internal static class ModSettings
             PlayerPrefs.Save();
             Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP option: Obsolete Tech & Hulls mode {(value ? "Retain" : "Vanilla")}.");
             LogCurrentSettings("after Obsolete Tech & Hulls change");
+        }
+    }
+
+    internal static bool SuperstructureRefitsEnabled
+    {
+        get => superstructureRefitsEnabled ??= PlayerPrefs.GetInt(SuperstructureRefitsEnabledKey, 0) != 0;
+        set
+        {
+            superstructureRefitsEnabled = value;
+            PlayerPrefs.SetInt(SuperstructureRefitsEnabledKey, value ? 1 : 0);
+            PlayerPrefs.Save();
+            Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP option: Superstructure Refits mode {SuperstructureRefitsModeText(value)}.");
+            LogCurrentSettings("after Superstructure Refits change");
         }
     }
 
@@ -214,6 +231,19 @@ internal static class ModSettings
         }
     }
 
+    internal static bool ExperimentalNationShipPaintsEnabled
+    {
+        get => experimentalNationShipPaintsEnabled ??= PlayerPrefs.GetInt(ExperimentalNationShipPaintsEnabledKey, 0) != 0;
+        set
+        {
+            experimentalNationShipPaintsEnabled = value;
+            PlayerPrefs.SetInt(ExperimentalNationShipPaintsEnabledKey, value ? 1 : 0);
+            PlayerPrefs.Save();
+            Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP option: Experimental Nation Ship Paints mode {ExperimentalNationShipPaintsModeText(value)}.");
+            LogCurrentSettings("after Experimental Nation Ship Paints change");
+        }
+    }
+
     internal static bool DesignAccuracyPenaltiesBalanced
         => DesignAccuracyPenaltyMode != AccuracyPenaltyMode.Vanilla;
 
@@ -240,7 +270,9 @@ internal static class ModSettings
            $"Submarine Warfare={SubmarineWarfareModeText(SubmarineWarfareDisabled)}; " +
            $"CA+ Torpedoes={MajorShipTorpedoesModeText(MajorShipTorpedoesRestricted)}; " +
            $"Obsolete Tech & Hulls={ObsoleteDesignRetentionModeText(ObsoleteDesignRetentionEnabled)}; " +
-           $"Map Geometry={CampaignMapModeText(CampaignMapWraparoundEnabled)}";
+           $"Superstructure Refits={SuperstructureRefitsModeText(SuperstructureRefitsEnabled)}; " +
+           $"Map Geometry={CampaignMapModeText(CampaignMapWraparoundEnabled)}; " +
+           $"Experimental Nation Ship Paints={ExperimentalNationShipPaintsModeText(ExperimentalNationShipPaintsEnabled)}";
 
     internal static string BattleWeatherModeText(bool alwaysSunny)
         => alwaysSunny ? "Always Sunny" : "Vanilla";
@@ -266,8 +298,14 @@ internal static class ModSettings
     internal static string ObsoleteDesignRetentionModeText(bool enabled)
         => enabled ? "Retain" : "Vanilla";
 
+    internal static string SuperstructureRefitsModeText(bool enabled)
+        => enabled ? "Enabled" : "Vanilla";
+
     internal static string CampaignMapModeText(bool enabled)
         => enabled ? "Disc World" : "Flat Earth";
+
+    internal static string ExperimentalNationShipPaintsModeText(bool enabled)
+        => enabled ? "Enabled" : "Vanilla";
 
     internal static string TechnologySpreadModeText(TechnologySpreadMode mode)
         => mode switch

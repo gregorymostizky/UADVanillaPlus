@@ -2,7 +2,7 @@
 
 UAD Vanilla Plus (`UAD:VP`) is a lightweight mod for Ultimate Admiral: Dreadnoughts that keeps the base game feel while adding small quality-of-life improvements.
 
-Current version: `0.3.1`
+Current version: `0.3.72`
 
 ## Philosophy
 
@@ -33,6 +33,7 @@ Start the game normally after copying the DLL. If the mod loads, `UAD:VP` and th
 **QoL:**
 
 - **Campaign maintenance indicators**: show dock expansion status and transport capacity directly in the campaign country info panel.
+- **Task force tonnage indicators**: fill campaign-map task-force icons by battle tonnage, with 100,000 tons and above shown as a full stack.
 - **Task force return shortcut**: add a `Return to <origin port>` button to task-force popups for one-click orders back to port.
 - **Campaign battle auto-resolve odds**: show the player's vanilla auto-resolve win chance in the battle popup.
 - **Campaign map port ship counts**: darken and bold ports with player or AI vessels, lightly mute empty ports, and show counts beside occupied port names on the world map.
@@ -66,6 +67,7 @@ Start the game normally after copying the DLL. If the mod loads, `UAD:VP` and th
 
 - **CA+ torpedo restriction**: optionally disallow torpedo launchers on heavy cruisers, battlecruisers, and battleships.
 - **Obsolete tech and hull retention**: optional player-only setting to keep already researched obsolete hulls and components available in ship design while AI design availability stays vanilla. This defaults to vanilla.
+- **Superstructure Refits**: optional player-only experimental fallback for researched same-class-group main towers, secondary towers, and funnels when vanilla only blocks exact hull-era compatibility. Refit designs need this option; normal designs also need Obsolete Tech & Hulls enabled.
 
 ### Battle
 
@@ -82,10 +84,13 @@ Start the game normally after copying the DLL. If the mod loads, `UAD:VP` and th
 ### Experimental
 
 - **Map Geometry**: optional `Disc World` seamless visual wrap-around for the campaign map at the Pacific edge, including source map material detail on side maps, clickable port/task-force/mission marker copies, wrapped task-force route visuals, and wrapped-map movement clicks/destinations. The `Flat Earth` setting keeps vanilla map geometry and remains the default.
+- **Experimental Nation Ship Paints**: optional nation-themed ship paint schemes for designer previews and battles. This is disabled by default so vanilla ship materials remain unchanged unless players opt in.
 
 ## Known Issues
 
 - Map Geometry's `Disc World` mode is still experimental. Map surface/material details, labels, political overlays, grid visuals, wrapped port/task-force/mission marker clicks, task-force route visuals, and wrapped-map movement destination clicks wrap. Country/state border-line rendering on side maps is still under diagnostic investigation, and some less-common map interactions and marker types may still use vanilla map behavior.
+- Experimental Nation Ship Paints is still being tuned for visual consistency and battle-load performance. Runtime texture recoloring remains disabled; the option currently uses material color clones only when explicitly enabled.
+- Superstructure Refits is intentionally conservative, but newly exposed tower and funnel combinations may still need class-group tightening or a denylist after broader campaign testing.
 
 ## Building And Running From Source
 

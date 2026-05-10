@@ -2,8 +2,11 @@
 
 ## Working Rules
 
-- Before continuing an existing multi-session investigation, check `plans/` for handoff notes. In particular, campaign map wrap-around follow-up work should start with `plans/campaign-map-wrap.md`.
-- Before every build, bump `UADVanillaPlus/ModInfo.cs` `MelonVersion` by incrementing the `0.2.x` patch version, and keep `README.md`'s current version in sync. Do not add a separate build-number suffix.
+- Before continuing an existing multi-session investigation, check `plans/` for handoff notes and reusable research docs. In particular, campaign map wrap-around follow-up work should start with `plans/campaign-map-wrap.md`.
+- Use `plans/` as the repo home for useful cross-session docs: vanilla-flow maps, formula notes, investigation summaries, design plans, and other findings that future VP work should reuse. When an investigation produces reusable knowledge, add or update a focused doc there once the user wants it recorded.
+- Before investigating or changing battle generation, custom battle loading, saved battle payloads, or campaign battle execution, read `plans/vanilla-battle-flow.md` first for the vanilla flow and data-contract map.
+- Before making UI layout changes, including adding buttons, toggles, text, labels, overlays, or popup/menu controls, read `plans/ui-layout-guide.md` first and follow its decision tree for choosing between native button cloning, existing-label text injection, child overlays, layout-group rows, or explicitly reserved floating panels.
+- Before every build, bump the current patch version. Update `UADVanillaPlus/ModInfo.cs` `MelonVersion`, `UADVanillaPlus/Properties/AssemblyInfo.cs` assembly/file versions, and `README.md`'s current version together. Do not add a separate build-number suffix.
 - Keep the in-game overlay version and MelonLoader metadata consistent through `ModInfo.DisplayText`.
 - After a successful build, always try the built-DLL copy immediately. Copy directly to the game `Mods` folder without first checking whether the game is running; if the DLL is locked, let the copy fail and report that.
 - When the user asks to merge, push, update GitHub, or otherwise publish completed work, commit locally, fast-forward/merge the work to `master`, and push `master` unless they explicitly limit it to local-only or ask for a different branch.
@@ -45,7 +48,7 @@ Copy-Item -LiteralPath 'E:\Codex\UADVanillaPlus\UADVanillaPlus\bin\Release\net6.
 
 ## Current Feature Layout
 
-- `plans/`: cross-session implementation notes and next-step plans. Read the relevant file before resuming a planned feature.
+- `plans/`: cross-session implementation notes, reusable investigation docs, vanilla-flow maps, formula notes, and next-step plans. Read the relevant file before resuming a planned feature or related investigation.
 - `Harmony/UiVersionTextPatch.cs`: version text overlay only.
 - `Harmony/CampaignFleetWindowDesignViewerPatch.cs`: Designs tab country viewer and design ship-count display only.
 - `Harmony/CampaignConstructionStatusPatch.cs`: campaign construction summary/count display plus campaign maintenance indicators only.
