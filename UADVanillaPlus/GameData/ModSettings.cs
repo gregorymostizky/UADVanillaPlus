@@ -22,6 +22,7 @@ internal static class ModSettings
     private const string TechnologySpreadModeKey = "uadvp_technology_spread_mode";
     private const string CampaignEndDateEnabledKey = "uadvp_campaign_end_date_enabled";
     private const string ExperimentalNationShipPaintsEnabledKey = "uadvp_experimental_nation_ship_paints_enabled";
+    private const string NationShipPaintStringKeyPrefix = "uadvp_nation_ship_paint_";
     private const string OldPanamaCanalEarlyEnabledKey = "uadvp_panama_canal_early_enabled";
 
     private static bool? portStrikeBalanced;
@@ -38,6 +39,7 @@ internal static class ModSettings
     private static TechnologySpreadMode? technologySpreadMode;
     private static bool? campaignEndDateEnabled;
     private static bool? experimentalNationShipPaintsEnabled;
+    private static int nationShipPaintsRevision;
 
     internal enum AccuracyPenaltyMode
     {
@@ -135,8 +137,8 @@ internal static class ModSettings
             superstructureRefitsEnabled = value;
             PlayerPrefs.SetInt(SuperstructureRefitsEnabledKey, value ? 1 : 0);
             PlayerPrefs.Save();
-            Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP option: Superstructure Refits mode {SuperstructureRefitsModeText(value)}.");
-            LogCurrentSettings("after Superstructure Refits change");
+            Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP option: Superstructure Compatibility mode {SuperstructureRefitsModeText(value)}.");
+            LogCurrentSettings("after Superstructure Compatibility change");
         }
     }
 
@@ -244,6 +246,27 @@ internal static class ModSettings
         }
     }
 
+    internal static int NationShipPaintsRevision => nationShipPaintsRevision;
+
+    internal static string NationShipPaintString(string nationKey)
+        => PlayerPrefs.GetString(NationShipPaintPreferenceKey(nationKey), string.Empty);
+
+    internal static bool SetNationShipPaintString(string nationKey, string value)
+    {
+        string preferenceKey = NationShipPaintPreferenceKey(nationKey);
+        string storedValue = value ?? string.Empty;
+        string currentValue = PlayerPrefs.GetString(preferenceKey, string.Empty);
+        if (string.Equals(currentValue, storedValue, StringComparison.Ordinal))
+            return false;
+
+        PlayerPrefs.SetString(preferenceKey, storedValue);
+        PlayerPrefs.Save();
+        nationShipPaintsRevision++;
+        Melon<UADVanillaPlusMod>.Logger.Msg(
+            $"UADVP option: Nation Ship Paints updated {NormalizeNationPaintKey(nationKey)} paint string.");
+        return true;
+    }
+
     internal static bool DesignAccuracyPenaltiesBalanced
         => DesignAccuracyPenaltyMode != AccuracyPenaltyMode.Vanilla;
 
@@ -270,7 +293,7 @@ internal static class ModSettings
            $"Submarine Warfare={SubmarineWarfareModeText(SubmarineWarfareDisabled)}; " +
            $"CA+ Torpedoes={MajorShipTorpedoesModeText(MajorShipTorpedoesRestricted)}; " +
            $"Obsolete Tech & Hulls={ObsoleteDesignRetentionModeText(ObsoleteDesignRetentionEnabled)}; " +
-           $"Superstructure Refits={SuperstructureRefitsModeText(SuperstructureRefitsEnabled)}; " +
+           $"Superstructure Compatibility={SuperstructureRefitsModeText(SuperstructureRefitsEnabled)}; " +
            $"Map Geometry={CampaignMapModeText(CampaignMapWraparoundEnabled)}; " +
            $"Experimental Nation Ship Paints={ExperimentalNationShipPaintsModeText(ExperimentalNationShipPaintsEnabled)}";
 
@@ -299,13 +322,13 @@ internal static class ModSettings
         => enabled ? "Retain" : "Vanilla";
 
     internal static string SuperstructureRefitsModeText(bool enabled)
-        => enabled ? "Enabled" : "Vanilla";
+        => enabled ? "Unrestricted" : "Vanilla";
 
     internal static string CampaignMapModeText(bool enabled)
         => enabled ? "Disc World" : "Flat Earth";
 
     internal static string ExperimentalNationShipPaintsModeText(bool enabled)
-        => enabled ? "Enabled" : "Vanilla";
+        => enabled ? "On" : "Off";
 
     internal static string TechnologySpreadModeText(TechnologySpreadMode mode)
         => mode switch
@@ -339,5 +362,38 @@ internal static class ModSettings
         return Enum.IsDefined(typeof(TechnologySpreadMode), stored)
             ? (TechnologySpreadMode)stored
             : TechnologySpreadMode.Vanilla;
+    }
+
+    private static string NationShipPaintPreferenceKey(string nationKey)
+        => NationShipPaintStringKeyPrefix + NormalizeNationPaintKey(nationKey);
+
+    private static string NormalizeNationPaintKey(string nationKey)
+    {
+        if (string.IsNullOrWhiteSpace(nationKey))
+            return "unknown";
+
+        string trimmed = nationKey.Trim().ToLowerInvariant();
+        char[] chars = new char[trimmed.Length];
+        int count = 0;
+        bool lastWasUnderscore = false;
+        foreach (char c in trimmed)
+        {
+            bool isAllowed = char.IsLetterOrDigit(c);
+            if (isAllowed)
+            {
+                chars[count++] = c;
+                lastWasUnderscore = false;
+                continue;
+            }
+
+            if (!lastWasUnderscore)
+            {
+                chars[count++] = '_';
+                lastWasUnderscore = true;
+            }
+        }
+
+        string normalized = new(chars, 0, count);
+        return normalized.Trim('_').Length == 0 ? "unknown" : normalized.Trim('_');
     }
 }

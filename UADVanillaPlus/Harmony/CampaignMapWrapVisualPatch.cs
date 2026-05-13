@@ -132,8 +132,8 @@ internal static class CampaignMapWrapVisualPatch
             return;
 
         Vector3 sourceWorld = source.WorldPos;
-        SyncDynamicMarkerCopy(copies.Negative, source, mapUi, sourceWorld, -1, -copySpacing, scale);
-        SyncDynamicMarkerCopy(copies.Positive, source, mapUi, sourceWorld, 1, copySpacing, scale);
+        SyncDynamicMarkerCopy(copies.Negative, copies.NegativeVisuals, source, mapUi, sourceWorld, -1, -copySpacing, scale);
+        SyncDynamicMarkerCopy(copies.Positive, copies.PositiveVisuals, source, mapUi, sourceWorld, 1, copySpacing, scale);
     }
 
     internal static void NormalizeWrappedMapClick(ref Vector3 position)
@@ -482,15 +482,21 @@ internal static class CampaignMapWrapVisualPatch
         {
             GameObject? copy = lap < 0 ? copies.Negative : copies.Positive;
             if (copy != null)
-                copy.SetActive(false);
+                SetActiveIfChanged(copy, false);
         }
 
         foreach (RouteCopySet copies in RouteCopies.Values)
         {
             Route? copy = lap < 0 ? copies.Negative : copies.Positive;
             if (copy != null)
-                copy.gameObject.SetActive(false);
+                SetActiveIfChanged(copy.gameObject, false);
         }
+    }
+
+    private static void SetActiveIfChanged(GameObject obj, bool active)
+    {
+        if (obj != null && obj.activeSelf != active)
+            obj.SetActive(active);
     }
 
     private static DynamicMarkerCopySet? GetOrCreateDynamicMarkerCopies(CampaignMapElement source)
@@ -558,14 +564,22 @@ internal static class CampaignMapWrapVisualPatch
         return copy;
     }
 
-    private static void SyncDynamicMarkerCopy(GameObject copy, CampaignMapElement source, MapUI mapUi, Vector3 sourceWorld, int lap, float xOffset, float scale)
+    private static void SyncDynamicMarkerCopy(
+        GameObject copy,
+        DynamicMarkerVisualCache visuals,
+        CampaignMapElement source,
+        MapUI mapUi,
+        Vector3 sourceWorld,
+        int lap,
+        float xOffset,
+        float scale)
     {
         if (copy == null || source == null)
             return;
 
         if (!IsVisualLapActive(lap) || !source.gameObject.activeSelf)
         {
-            copy.SetActive(false);
+            SetActiveIfChanged(copy, false);
             return;
         }
 
@@ -574,13 +588,13 @@ internal static class CampaignMapWrapVisualPatch
 
         Vector3 wrappedUiPosition = mapUi.WorldToUISpace(mapUi.UICanvas, wrappedWorld);
 
-        copy.SetActive(true);
+        SetActiveIfChanged(copy, true);
 
         if (copy.TryGetComponent(out ShipUI shipCopy))
         {
             shipCopy.offset = source.TryCast<ShipUI>()?.offset ?? shipCopy.offset;
             shipCopy.UpdatePositionScale(wrappedUiPosition, scale);
-            SyncDynamicCloneVisuals(copy, source.gameObject, xOffset);
+            SyncDynamicCloneVisuals(visuals, xOffset);
             return;
         }
 
@@ -588,7 +602,7 @@ internal static class CampaignMapWrapVisualPatch
         if (copyElement != null)
         {
             copyElement.UpdatePositionScale(wrappedUiPosition, scale);
-            SyncDynamicCloneVisuals(copy, source.gameObject, xOffset);
+            SyncDynamicCloneVisuals(visuals, xOffset);
         }
     }
 
@@ -1221,11 +1235,11 @@ internal static class CampaignMapWrapVisualPatch
 
         if (!IsVisualLapActive(lap) || !source.gameObject.activeSelf)
         {
-            copy.gameObject.SetActive(false);
+            SetActiveIfChanged(copy.gameObject, false);
             return;
         }
 
-        copy.gameObject.SetActive(true);
+        SetActiveIfChanged(copy.gameObject, true);
         copy.transform.localRotation = source.transform.localRotation;
         copy.transform.localScale = source.transform.localScale;
 
@@ -1247,7 +1261,7 @@ internal static class CampaignMapWrapVisualPatch
         copy.useWorldSpace = source.useWorldSpace;
         copy.positionCount = source.positionCount;
         copy.sharedMaterial = source.sharedMaterial;
-        copy.gameObject.SetActive(source.gameObject.activeSelf);
+        SetActiveIfChanged(copy.gameObject, source.gameObject.activeSelf);
 
         for (int i = 0; i < source.positionCount; i++)
         {
@@ -1262,7 +1276,7 @@ internal static class CampaignMapWrapVisualPatch
         if (source.Destination == null || copy.Destination == null)
             return;
 
-        copy.Destination.SetActive(source.Destination.activeSelf);
+        SetActiveIfChanged(copy.Destination, source.Destination.activeSelf);
         Vector3 position = source.Destination.transform.position;
         position.x += xOffset;
         copy.Destination.transform.position = position;
@@ -1276,26 +1290,27 @@ internal static class CampaignMapWrapVisualPatch
         }
     }
 
-    private static void SyncDynamicCloneVisuals(GameObject copy, GameObject source, float xOffset)
+    private static void SyncDynamicCloneVisuals(DynamicMarkerVisualCache visuals, float xOffset)
     {
-        SyncDynamicCloneGraphics(copy, source);
-        SyncTaskForceTonnageIndicatorClone(copy, source);
-        SyncDynamicCloneTextLayout(copy, source);
-        SyncDynamicCloneLineRenderers(copy, source, xOffset);
+        if (!visuals.IsUsable)
+            return;
+
+        SyncDynamicCloneGraphics(visuals);
+        SyncTaskForceTonnageIndicatorClone(visuals);
+        SyncDynamicCloneTextLayout(visuals);
+        SyncDynamicCloneLineRenderers(visuals, xOffset);
     }
 
-    private static void SyncTaskForceTonnageIndicatorClone(GameObject copy, GameObject source)
+    private static void SyncTaskForceTonnageIndicatorClone(DynamicMarkerVisualCache visuals)
     {
-        ShipUI? sourceShip = source.GetComponent<ShipUI>();
-        ShipUI? copyShip = copy.GetComponent<ShipUI>();
-        if (sourceShip != null && copyShip != null)
-            CampaignTaskForceTonnageIndicatorPatch.SyncWrappedClone(sourceShip, copyShip);
+        if (visuals.SourceShip != null && visuals.CopyShip != null)
+            CampaignTaskForceTonnageIndicatorPatch.SyncWrappedClone(visuals.SourceShip, visuals.CopyShip);
     }
 
-    private static void SyncDynamicCloneGraphics(GameObject copy, GameObject source)
+    private static void SyncDynamicCloneGraphics(DynamicMarkerVisualCache visuals)
     {
-        Graphic[] sourceGraphics = source.GetComponentsInChildren<Graphic>(true);
-        Graphic[] copyGraphics = copy.GetComponentsInChildren<Graphic>(true);
+        Graphic[] sourceGraphics = visuals.SourceGraphics;
+        Graphic[] copyGraphics = visuals.CopyGraphics;
         int count = Mathf.Min(sourceGraphics.Length, copyGraphics.Length);
 
         for (int i = 0; i < count; i++)
@@ -1326,10 +1341,10 @@ internal static class CampaignMapWrapVisualPatch
         }
     }
 
-    private static void SyncDynamicCloneLineRenderers(GameObject copy, GameObject source, float xOffset)
+    private static void SyncDynamicCloneLineRenderers(DynamicMarkerVisualCache visuals, float xOffset)
     {
-        LineRenderer[] sourceLines = source.GetComponentsInChildren<LineRenderer>(true);
-        LineRenderer[] copyLines = copy.GetComponentsInChildren<LineRenderer>(true);
+        LineRenderer[] sourceLines = visuals.SourceLines;
+        LineRenderer[] copyLines = visuals.CopyLines;
         int count = Mathf.Min(sourceLines.Length, copyLines.Length);
 
         for (int i = 0; i < count; i++)
@@ -1339,7 +1354,7 @@ internal static class CampaignMapWrapVisualPatch
             if (sourceLine == null || copyLine == null)
                 continue;
 
-            copyLine.gameObject.SetActive(sourceLine.gameObject.activeSelf);
+            SetActiveIfChanged(copyLine.gameObject, sourceLine.gameObject.activeSelf);
             copyLine.enabled = sourceLine.enabled;
             copyLine.useWorldSpace = sourceLine.useWorldSpace;
             copyLine.positionCount = sourceLine.positionCount;
@@ -1359,10 +1374,10 @@ internal static class CampaignMapWrapVisualPatch
         }
     }
 
-    private static void SyncDynamicCloneTextLayout(GameObject copy, GameObject source)
+    private static void SyncDynamicCloneTextLayout(DynamicMarkerVisualCache visuals)
     {
-        TMP_Text[] sourceTexts = source.GetComponentsInChildren<TMP_Text>(true);
-        TMP_Text[] copyTexts = copy.GetComponentsInChildren<TMP_Text>(true);
+        TMP_Text[] sourceTexts = visuals.SourceTexts;
+        TMP_Text[] copyTexts = visuals.CopyTexts;
         int count = Mathf.Min(sourceTexts.Length, copyTexts.Length);
 
         for (int i = 0; i < count; i++)
@@ -2227,13 +2242,47 @@ internal static class CampaignMapWrapVisualPatch
         internal readonly CampaignMapElement Source;
         internal readonly GameObject Negative;
         internal readonly GameObject Positive;
+        internal readonly DynamicMarkerVisualCache NegativeVisuals;
+        internal readonly DynamicMarkerVisualCache PositiveVisuals;
 
         internal DynamicMarkerCopySet(CampaignMapElement source, GameObject negative, GameObject positive)
         {
             Source = source;
             Negative = negative;
             Positive = positive;
+            NegativeVisuals = new DynamicMarkerVisualCache(source.gameObject, negative);
+            PositiveVisuals = new DynamicMarkerVisualCache(source.gameObject, positive);
         }
+    }
+
+    private sealed class DynamicMarkerVisualCache
+    {
+        internal readonly GameObject Source;
+        internal readonly GameObject Copy;
+        internal readonly ShipUI? SourceShip;
+        internal readonly ShipUI? CopyShip;
+        internal readonly Graphic[] SourceGraphics;
+        internal readonly Graphic[] CopyGraphics;
+        internal readonly LineRenderer[] SourceLines;
+        internal readonly LineRenderer[] CopyLines;
+        internal readonly TMP_Text[] SourceTexts;
+        internal readonly TMP_Text[] CopyTexts;
+
+        internal DynamicMarkerVisualCache(GameObject source, GameObject copy)
+        {
+            Source = source;
+            Copy = copy;
+            SourceShip = source != null ? source.GetComponent<ShipUI>() : null;
+            CopyShip = copy != null ? copy.GetComponent<ShipUI>() : null;
+            SourceGraphics = source != null ? source.GetComponentsInChildren<Graphic>(true) : Array.Empty<Graphic>();
+            CopyGraphics = copy != null ? copy.GetComponentsInChildren<Graphic>(true) : Array.Empty<Graphic>();
+            SourceLines = source != null ? source.GetComponentsInChildren<LineRenderer>(true) : Array.Empty<LineRenderer>();
+            CopyLines = copy != null ? copy.GetComponentsInChildren<LineRenderer>(true) : Array.Empty<LineRenderer>();
+            SourceTexts = source != null ? source.GetComponentsInChildren<TMP_Text>(true) : Array.Empty<TMP_Text>();
+            CopyTexts = copy != null ? copy.GetComponentsInChildren<TMP_Text>(true) : Array.Empty<TMP_Text>();
+        }
+
+        internal bool IsUsable => Source != null && Copy != null;
     }
 
     private sealed class RouteCopySet

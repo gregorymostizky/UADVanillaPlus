@@ -36,7 +36,8 @@ internal static class CampaignCountryInfoFinalRefreshPatch
 
         if (ui?.CountryInfo == null ||
             PlayerController.Instance == null ||
-            CampaignController.Instance?.CampaignData == null)
+            CampaignController.Instance?.CampaignData == null ||
+            !CampaignTechnologyStatusPatch.IsCampaignWorldReady())
         {
             return false;
         }

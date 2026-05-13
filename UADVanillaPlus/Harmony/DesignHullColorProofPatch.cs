@@ -62,6 +62,38 @@ internal static class DesignHullColorProofPatch
             };
     }
 
+    internal readonly struct NationPaintUiInfo
+    {
+        internal NationPaintUiInfo(string key, string label, string value, string template)
+        {
+            Key = key;
+            Label = label;
+            Value = value;
+            Template = template;
+        }
+
+        internal string Key { get; }
+        internal string Label { get; }
+        internal string Value { get; }
+        internal string Template { get; }
+    }
+
+    private sealed class NationPaintDefinition
+    {
+        internal NationPaintDefinition(string key, string label, string[] matchTokens, ShipPaintScheme builtInScheme)
+        {
+            Key = key;
+            Label = label;
+            MatchTokens = matchTokens;
+            BuiltInScheme = builtInScheme;
+        }
+
+        internal string Key { get; }
+        internal string Label { get; }
+        internal string[] MatchTokens { get; }
+        internal ShipPaintScheme BuiltInScheme { get; }
+    }
+
     private sealed class PaintedMaterialSet
     {
         internal PaintedMaterialSet(Material[] materials, bool changedRenderer, int paintedMaterialCount, int skippedMaterialCount)
@@ -115,6 +147,8 @@ internal static class DesignHullColorProofPatch
     private static readonly Dictionary<int, string> ProfileSuffixByGeneratedMaterial = new();
     private static readonly Dictionary<int, RendererOriginalMaterialSet> OriginalMaterialsByPaintedRenderer = new();
     private static readonly Dictionary<string, string> BattleCountryByShipId = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, ShipPaintScheme> ConfiguredNationPaintSchemes = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly HashSet<string> InvalidNationPaintWarnings = new(StringComparer.OrdinalIgnoreCase);
     private static readonly HashSet<string> FailedTextureCopies = new(StringComparer.OrdinalIgnoreCase);
     private static readonly HashSet<string> FailedMaterialCopies = new(StringComparer.OrdinalIgnoreCase);
     private static readonly HashSet<string> DamagePaintSuppressedPartKeys = new(StringComparer.OrdinalIgnoreCase);
@@ -124,7 +158,11 @@ internal static class DesignHullColorProofPatch
         Profile(0.94f, 0.93f, 0.86f, 236, 234, 218, 0.16f, "hull_warmwhite"),
         Profile(0.73f, 0.56f, 0.33f, 184, 140, 82, 0.26f, "top_buff"),
         Profile(0.66f, 0.52f, 0.35f, 164, 132, 92, 0.24f, "gun_buff"));
-    private static readonly ShipPaintScheme UsaScheme = DefaultScheme;
+    private static readonly ShipPaintScheme UsaScheme = new(
+        "DefaultWhiteBuff",
+        Profile(0.95686275f, 0.95686275f, 0.93333334f, 244, 244, 238, 0.16f, "hull_warmwhite"),
+        Profile(0.7607843f, 0.627451f, 0.42352942f, 194, 160, 108, 0.26f, "top_buff"),
+        Profile(0.7019608f, 0.57254905f, 0.3882353f, 179, 146, 99, 0.24f, "gun_buff"));
     private static readonly ShipPaintScheme BritainScheme = new(
         "BritainBlackWhite",
         Profile(0.06f, 0.06f, 0.055f, 18, 18, 16, 0.72f, "hull_black"),
@@ -162,14 +200,27 @@ internal static class DesignHullColorProofPatch
         Profile(0.62f, 0.44f, 0.20f, 154, 110, 52, 0.34f, "gun_ochre"));
     private static readonly ShipPaintScheme SpainScheme = new(
         "SpainWarmWhiteBuff",
-        Profile(0.90f, 0.86f, 0.74f, 224, 214, 184, 0.34f, "hull_spanishwarmwhite"),
-        Profile(0.68f, 0.50f, 0.29f, 170, 124, 72, 0.32f, "top_deepbuff"),
-        Profile(0.44f, 0.40f, 0.34f, 112, 102, 86, 0.32f, "gun_warmdark"));
+        Profile(0.06666667f, 0.0627451f, 0.050980393f, 17, 16, 13, 0.34f, "hull_spanishwarmwhite"),
+        Profile(0.9490196f, 0.93333334f, 0.8666667f, 242, 238, 221, 0.32f, "top_deepbuff"),
+        Profile(0.76862746f, 0.6039216f, 0.27058825f, 196, 154, 69, 0.32f, "gun_warmdark"));
     private static readonly ShipPaintScheme ChinaScheme = new(
         "ChinaWhiteYellow",
         Profile(0.96f, 0.94f, 0.84f, 238, 232, 208, 0.34f, "hull_chinawhite"),
         Profile(0.90f, 0.68f, 0.16f, 228, 166, 38, 0.40f, "top_yellowfunnels"),
         Profile(0.58f, 0.46f, 0.28f, 146, 116, 72, 0.34f, "gun_yellowbuff"));
+    private static readonly NationPaintDefinition[] NationPaintDefinitions =
+    {
+        new("usa", "USA", new[] { "united states", "usa", "america" }, UsaScheme),
+        new("britain", "UK", new[] { "britain", "british", "uk", "england" }, BritainScheme),
+        new("germany", "Germany", new[] { "germany", "german" }, GermanyScheme),
+        new("france", "France", new[] { "france", "french" }, FranceScheme),
+        new("russia", "Russia", new[] { "russia", "russian", "soviet" }, RussiaScheme),
+        new("japan", "Japan", new[] { "japan", "japanese" }, JapanScheme),
+        new("italy", "Italy", new[] { "italy", "italian" }, ItalyScheme),
+        new("austria_hungary", "Austria-Hungary", new[] { "austria", "austro", "hungary", "hungarian" }, AustriaScheme),
+        new("spain", "Spain", new[] { "spain", "spanish" }, SpainScheme),
+        new("china", "China", new[] { "china", "chinese" }, ChinaScheme),
+    };
     private static readonly string[] ColorProperties = { "_Color", "_BaseColor" };
     private static readonly string[] TextureNameProperties = { "_MainTex", "_BaseMap", "_Albedo", "_DiffuseTex", "_BaseColorMap" };
     private static readonly string[] HullSkipTokens =
@@ -230,11 +281,17 @@ internal static class DesignHullColorProofPatch
     private static int BattleRepaintBudgetLogCount;
     private static int GeneratedObjectCleanupLogCount;
     private static int DamagePaintPolicyLogCount;
+    private static int LodRendererLogCount;
+    private static int MissedGunLodRendererLogCount;
+    private static int NationPaintSettingsLogCount;
+    private static int ResolvedNationPaintRevision = -1;
     private static int BattleRepaintGeneration;
     private static bool BattleRepaintScheduled;
     private static int BattleRepaintScheduledGeneration;
     private static string LastCampaignBattleCountryMapId = string.Empty;
     private const int MaxApplicationLogsPerArea = 4;
+    private const int MaxLodRendererLogs = 8;
+    private const int MaxMissedGunLodRendererLogs = 12;
     private const int MaxBattleRepaintCandidates = 240;
     private const int BattleRepaintBattleReadyWaitAttempts = 60;
     private const float BattleRepaintBattleReadyWaitDelaySeconds = 0.2f;
@@ -260,6 +317,28 @@ internal static class DesignHullColorProofPatch
             new Color32(textureR, textureG, textureB, byte.MaxValue),
             textureBlend,
             "_uadvp_" + suffix);
+
+    internal static IEnumerable<NationPaintUiInfo> NationPaintOptions()
+    {
+        foreach (NationPaintDefinition definition in NationPaintDefinitions)
+        {
+            yield return new NationPaintUiInfo(
+                definition.Key,
+                definition.Label,
+                ModSettings.NationShipPaintString(definition.Key),
+                BuiltInPaintString(definition));
+        }
+    }
+
+    internal static void RefreshNationPaintSettingsCache(string context)
+    {
+        if (!IsEnabled)
+            return;
+
+        EnsureNationPaintSchemeCache();
+        if (NationPaintSettingsLogCount++ < 3)
+            Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP ship paint proof: refreshed Nation Ship Paints settings during {context}.");
+    }
 
     [HarmonyPostfix]
     [HarmonyPatch(nameof(Part.ModelLoadedOrReused))]
@@ -331,17 +410,37 @@ internal static class DesignHullColorProofPatch
 
     internal static void ApplyCurrentSetting()
     {
+        ResolvedNationPaintRevision = -1;
+        ConfiguredNationPaintSchemes.Clear();
+
         if (!IsEnabled)
         {
             ResetScenePaintCache("Experimental Nation Ship Paints disabled");
             return;
         }
 
+        EnsureNationPaintSchemeCache();
         Melon<UADVanillaPlusMod>.Logger.Msg("UADVP ship paint proof: Experimental Nation Ship Paints enabled.");
         if (GameManager.IsBattle)
             ScheduleBattleRepaintRetries("Experimental Nation Ship Paints enabled", repaintImmediately: true);
         else if (GameManager.IsConstructor)
             RepaintAllLoadedParts("Experimental Nation Ship Paints enabled");
+    }
+
+    internal static void ApplyNationPaintSettingsChange(string context)
+    {
+        ResolvedNationPaintRevision = -1;
+        ConfiguredNationPaintSchemes.Clear();
+
+        if (!IsEnabled)
+            return;
+
+        EnsureNationPaintSchemeCache();
+        ResetScenePaintCache($"Nation Ship Paints changed ({context})");
+        if (GameManager.IsBattle || GameManager.IsConstructor)
+            RepaintAllLoadedParts($"Nation Ship Paints changed ({context})");
+        else if (NationPaintSettingsLogCount++ < 6)
+            Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP ship paint proof: stored Nation Ship Paints change during {context}; no active ship scene repaint needed.");
     }
 
     internal static void ResetScenePaintCache(string context)
@@ -680,29 +779,175 @@ internal static class DesignHullColorProofPatch
         if (string.IsNullOrWhiteSpace(key))
             key = PlayerKey(part.ship?.player);
 
-        if (ContainsAny(key, new[] { "united states", "usa", "america" }))
-            return UsaScheme;
-        if (ContainsAny(key, new[] { "britain", "british", "uk", "england" }))
-            return BritainScheme;
-        if (ContainsAny(key, new[] { "germany", "german" }))
-            return GermanyScheme;
-        if (ContainsAny(key, new[] { "france", "french" }))
-            return FranceScheme;
-        if (ContainsAny(key, new[] { "russia", "russian", "soviet" }))
-            return RussiaScheme;
-        if (ContainsAny(key, new[] { "japan", "japanese" }))
-            return JapanScheme;
-        if (ContainsAny(key, new[] { "italy", "italian" }))
-            return ItalyScheme;
-        if (ContainsAny(key, new[] { "austria", "austro", "hungary", "hungarian" }))
-            return AustriaScheme;
-        if (ContainsAny(key, new[] { "spain", "spanish" }))
-            return SpainScheme;
-        if (ContainsAny(key, new[] { "china", "chinese" }))
-            return ChinaScheme;
+        EnsureNationPaintSchemeCache();
+        foreach (NationPaintDefinition definition in NationPaintDefinitions)
+        {
+            if (!ContainsAny(key, definition.MatchTokens))
+                continue;
+
+            return ConfiguredNationPaintSchemes.TryGetValue(definition.Key, out ShipPaintScheme configuredScheme)
+                ? configuredScheme
+                : definition.BuiltInScheme;
+        }
 
         return DefaultScheme;
     }
+
+    private static void EnsureNationPaintSchemeCache()
+    {
+        int revision = ModSettings.NationShipPaintsRevision;
+        if (ResolvedNationPaintRevision == revision)
+            return;
+
+        ConfiguredNationPaintSchemes.Clear();
+        foreach (NationPaintDefinition definition in NationPaintDefinitions)
+        {
+            string rawValue = ModSettings.NationShipPaintString(definition.Key);
+            if (string.IsNullOrWhiteSpace(rawValue))
+                continue;
+
+            if (TryParsePaintScheme(definition, rawValue, out ShipPaintScheme scheme, out string error))
+            {
+                ConfiguredNationPaintSchemes[definition.Key] = scheme;
+                continue;
+            }
+
+            string warningKey = $"{definition.Key}:{rawValue}";
+            if (InvalidNationPaintWarnings.Add(warningKey))
+            {
+                Melon<UADVanillaPlusMod>.Logger.Warning(
+                    $"UADVP ship paint proof: invalid Nation Ship Paints string for {definition.Label}; using built-in scheme. {error}");
+            }
+        }
+
+        ResolvedNationPaintRevision = revision;
+    }
+
+    private static bool TryParsePaintScheme(NationPaintDefinition definition, string rawValue, out ShipPaintScheme scheme, out string error)
+    {
+        Color32 hull = Color32FromColor(definition.BuiltInScheme.HullSide.MaterialColor);
+        Color32 superstructure = Color32FromColor(definition.BuiltInScheme.Superstructure.MaterialColor);
+        Color32 gun = Color32FromColor(definition.BuiltInScheme.Gun.MaterialColor);
+        bool sawRecognizedValue = false;
+
+        string[] fields = rawValue.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (string field in fields)
+        {
+            int separator = field.IndexOf('=');
+            if (separator <= 0 || separator >= field.Length - 1)
+            {
+                scheme = definition.BuiltInScheme;
+                error = $"Expected key=#RRGGBB but got '{field}'.";
+                return false;
+            }
+
+            string key = NormalizePaintFieldKey(field[..separator]);
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                scheme = definition.BuiltInScheme;
+                error = $"Unknown color key '{field[..separator]}'.";
+                return false;
+            }
+
+            if (!TryParseHexColor(field[(separator + 1)..], out Color32 color))
+            {
+                scheme = definition.BuiltInScheme;
+                error = $"Invalid color '{field[(separator + 1)..]}' for {key}; use #RRGGBB.";
+                return false;
+            }
+
+            sawRecognizedValue = true;
+            switch (key)
+            {
+                case "hull":
+                    hull = color;
+                    break;
+                case "super":
+                    superstructure = color;
+                    break;
+                case "gun":
+                    gun = color;
+                    break;
+            }
+        }
+
+        if (!sawRecognizedValue)
+        {
+            scheme = definition.BuiltInScheme;
+            error = "No paint values were found.";
+            return false;
+        }
+
+        scheme = new ShipPaintScheme(
+            $"{definition.BuiltInScheme.Id}_Custom",
+            CustomProfile(hull, definition.BuiltInScheme.HullSide, definition.Key, "hull"),
+            CustomProfile(superstructure, definition.BuiltInScheme.Superstructure, definition.Key, "super"),
+            CustomProfile(gun, definition.BuiltInScheme.Gun, definition.Key, "gun"));
+        error = string.Empty;
+        return true;
+    }
+
+    private static string NormalizePaintFieldKey(string key)
+    {
+        string normalized = (key ?? string.Empty).Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "hull" => "hull",
+            "super" or "top" or "superstructure" => "super",
+            "gun" or "guns" => "gun",
+            _ => string.Empty
+        };
+    }
+
+    private static PaintProfile CustomProfile(Color32 color, PaintProfile fallback, string nationKey, string area)
+        => new(
+            ColorFromColor32(color),
+            color,
+            fallback.TextureBlend,
+            $"_uadvp_custom_{nationKey}_{area}_{HexString(color).TrimStart('#').ToLowerInvariant()}");
+
+    private static string BuiltInPaintString(NationPaintDefinition definition)
+        => $"hull={HexString(Color32FromColor(definition.BuiltInScheme.HullSide.MaterialColor))}; " +
+           $"super={HexString(Color32FromColor(definition.BuiltInScheme.Superstructure.MaterialColor))}; " +
+           $"gun={HexString(Color32FromColor(definition.BuiltInScheme.Gun.MaterialColor))}";
+
+    private static bool TryParseHexColor(string value, out Color32 color)
+    {
+        color = default;
+        string hex = (value ?? string.Empty).Trim();
+        if (hex.StartsWith("#", StringComparison.Ordinal))
+            hex = hex[1..];
+
+        if (hex.Length != 6)
+            return false;
+
+        try
+        {
+            color = new Color32(
+                Convert.ToByte(hex[..2], 16),
+                Convert.ToByte(hex.Substring(2, 2), 16),
+                Convert.ToByte(hex.Substring(4, 2), 16),
+                byte.MaxValue);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static Color32 Color32FromColor(Color color)
+        => new(
+            (byte)Mathf.Clamp(Mathf.RoundToInt(color.r * byte.MaxValue), 0, byte.MaxValue),
+            (byte)Mathf.Clamp(Mathf.RoundToInt(color.g * byte.MaxValue), 0, byte.MaxValue),
+            (byte)Mathf.Clamp(Mathf.RoundToInt(color.b * byte.MaxValue), 0, byte.MaxValue),
+            byte.MaxValue);
+
+    private static Color ColorFromColor32(Color32 color)
+        => new(color.r / 255f, color.g / 255f, color.b / 255f, 1f);
+
+    private static string HexString(Color32 color)
+        => $"#{color.r:X2}{color.g:X2}{color.b:X2}";
 
     internal static void RememberCurrentCampaignBattleCountries(string context)
     {
@@ -957,7 +1202,19 @@ internal static class DesignHullColorProofPatch
         }
 
         if (yieldedVisualRenderer)
+        {
+            PaintArea? paintArea = PaintAreaFor(part);
+            if (paintArea == PaintArea.Gun)
+                LogMissedGunChildRenderers(part, seen);
+
+            if (IsFunnelOrSmokestack(part) || paintArea == PaintArea.Gun)
+            {
+                foreach (Renderer lodRenderer in LodRenderers(part, seen))
+                    yield return lodRenderer;
+            }
+
             yield break;
+        }
 
         GameObject root = part.gameObject;
         if (root == null)
@@ -968,6 +1225,194 @@ internal static class DesignHullColorProofPatch
         {
             if (renderer != null && seen.Add(renderer.GetInstanceID()))
                 yield return renderer;
+        }
+    }
+
+    private static bool IsFunnelOrSmokestack(Part part)
+    {
+        PartData? data = part.data;
+        if (data == null)
+            return false;
+
+        if (data.isFunnel)
+            return true;
+
+        string text = $"{data.name ?? string.Empty} {data.nameUi ?? string.Empty}";
+        return ContainsAny(text, new[] { "funnel", "smokestack", "smoke_stack", "smoke stack" });
+    }
+
+    private static IEnumerable<Renderer> LodRenderers(Part part, HashSet<int> seen)
+    {
+        GameObject root = part.gameObject;
+        if (root == null)
+            yield break;
+
+        Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
+        List<Renderer> lodRenderers = new();
+        Transform rootTransform = root.transform;
+        PaintArea? paintArea = PaintAreaFor(part);
+
+        foreach (Renderer renderer in renderers)
+        {
+            if (renderer == null || !seen.Add(renderer.GetInstanceID()))
+                continue;
+
+            if (RendererPathLooksLikeLod(renderer, rootTransform))
+                lodRenderers.Add(renderer);
+        }
+
+        if (lodRenderers.Count > 0 && LodRendererLogCount++ < MaxLodRendererLogs)
+        {
+            Melon<UADVanillaPlusMod>.Logger.Msg(
+                $"UADVP ship paint proof: included {lodRenderers.Count} extra {AreaLabel(paintArea ?? PaintArea.Superstructure)} LOD renderer(s) on {SafePartName(part.data)}.");
+        }
+
+        foreach (Renderer renderer in lodRenderers)
+            yield return renderer;
+    }
+
+    private static void LogMissedGunChildRenderers(Part part, HashSet<int> visualRendererIds)
+    {
+        if (MissedGunLodRendererLogCount >= MaxMissedGunLodRendererLogs)
+            return;
+
+        GameObject root = part.gameObject;
+        if (root == null)
+            return;
+
+        Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
+        Transform rootTransform = root.transform;
+        foreach (Renderer renderer in renderers)
+        {
+            if (renderer == null || visualRendererIds.Contains(renderer.GetInstanceID()))
+                continue;
+
+            Transform rendererTransform = renderer.transform;
+            bool looksLikeLod = RendererPathLooksLikeLod(renderer, rootTransform);
+            string rendererPath = TransformPath(rendererTransform, rootTransform);
+            string parentPath = rendererTransform != null && rendererTransform.parent != null
+                ? TransformPath(rendererTransform.parent, rootTransform)
+                : "<none>";
+            string materialNames = RendererMaterialNames(renderer);
+
+            MissedGunLodRendererLogCount++;
+            Melon<UADVanillaPlusMod>.Logger.Msg(
+                $"UADVP ship paint proof: gun child renderer outside visualRenderers on {SafePartName(part.data)}; " +
+                $"renderer={rendererPath}; parent={parentPath}; activeSelf={renderer.gameObject.activeSelf}; " +
+                $"activeInHierarchy={renderer.gameObject.activeInHierarchy}; looksLikeLod={looksLikeLod}; " +
+                $"materials={materialNames}.");
+
+            if (MissedGunLodRendererLogCount >= MaxMissedGunLodRendererLogs)
+                break;
+        }
+    }
+
+    private static bool RendererPathLooksLikeLod(Renderer renderer, Transform root)
+    {
+        Transform current = renderer.transform;
+        while (current != null)
+        {
+            if (LooksLikeLodName(current.name))
+                return true;
+
+            if (current == root)
+                break;
+
+            current = current.parent;
+        }
+
+        return RendererIsUnderLodGroup(renderer, root);
+    }
+
+    private static bool RendererIsUnderLodGroup(Renderer renderer, Transform root)
+    {
+        try
+        {
+            LODGroup lodGroup = renderer.GetComponentInParent<LODGroup>();
+            if (lodGroup == null)
+                return false;
+
+            if (root == null)
+                return true;
+
+            Transform lodTransform = lodGroup.transform;
+            Transform current = renderer.transform;
+            while (current != null)
+            {
+                if (current == lodTransform)
+                    return true;
+
+                if (current == root)
+                    break;
+
+                current = current.parent;
+            }
+        }
+        catch
+        {
+            return false;
+        }
+
+        return false;
+    }
+
+    private static bool LooksLikeLodName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return false;
+
+        string normalized = name
+            .Replace(" ", string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Replace("_", string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Replace("-", string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Replace(".", string.Empty, StringComparison.OrdinalIgnoreCase);
+
+        int index = normalized.IndexOf("lod", StringComparison.OrdinalIgnoreCase);
+        while (index >= 0)
+        {
+            int after = index + 3;
+            if (after >= normalized.Length || char.IsDigit(normalized[after]))
+                return true;
+
+            index = normalized.IndexOf("lod", after, StringComparison.OrdinalIgnoreCase);
+        }
+
+        return false;
+    }
+
+    private static string TransformPath(Transform transform, Transform root)
+    {
+        if (transform == null)
+            return "<null>";
+
+        List<string> names = new();
+        Transform current = transform;
+        while (current != null)
+        {
+            names.Add(current.name ?? "<unnamed>");
+            if (current == root)
+                break;
+
+            current = current.parent;
+        }
+
+        names.Reverse();
+        return string.Join("/", names);
+    }
+
+    private static string RendererMaterialNames(Renderer renderer)
+    {
+        try
+        {
+            Material[] materials = renderer.sharedMaterials;
+            if (materials == null || materials.Length == 0)
+                return "<none>";
+
+            return string.Join(", ", materials.Select(material => material != null ? material.name : "<null>"));
+        }
+        catch
+        {
+            return "<unavailable>";
         }
     }
 
@@ -1886,7 +2331,10 @@ internal static class DesignHullColorProofLeaveStatePatch
     private static void Postfix(GameManager.GameState state)
     {
         if (DesignHullColorProofPatch.IsEnabled
-            && state is GameManager.GameState.Constructor or GameManager.GameState.Battle or GameManager.GameState.CustomBattleSetup)
+            && state is GameManager.GameState.Constructor
+                or GameManager.GameState.Battle
+                or GameManager.GameState.CustomBattleSetup
+                or GameManager.GameState.World)
         {
             DesignHullColorProofPatch.ResetScenePaintCache($"leaving {state}");
         }

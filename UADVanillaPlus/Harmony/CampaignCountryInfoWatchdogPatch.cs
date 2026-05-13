@@ -25,8 +25,12 @@ internal static class CampaignCountryInfoWatchdogPatch
     {
         try
         {
-            if (PlayerController.Instance == null || CampaignController.Instance?.CampaignData == null)
+            if (PlayerController.Instance == null ||
+                CampaignController.Instance?.CampaignData == null ||
+                !CampaignTechnologyStatusPatch.IsCampaignWorldReady())
+            {
                 return;
+            }
 
             RefreshInstanceCacheIfNeeded();
             bool periodicRefresh = Time.realtimeSinceStartup >= nextPeriodicRefreshTime;

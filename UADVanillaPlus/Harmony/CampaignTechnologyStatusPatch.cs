@@ -14,6 +14,7 @@ namespace UADVanillaPlus.Harmony;
 [HarmonyPatch(typeof(CampaignCountryInfoUI))]
 internal static class CampaignTechnologyStatusPatch
 {
+    private const int MaxSaneCampaignTurn = 2400;
     private const float ResearchCompleteProgress = 100f;
     private static readonly Regex NextDiscoverySuffixRegex = new(@"\s*\(Next \d+m\)\s*$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
     private static readonly HashSet<GameObject> TooltipTargets = new();
@@ -32,6 +33,9 @@ internal static class CampaignTechnologyStatusPatch
         {
             Player? player = PlayerController.Instance;
             if (__instance?.Technology == null || player == null)
+                return;
+
+            if (!TryGetReadyCampaign(player, out _))
                 return;
 
             if (!TryGetNextDiscovery(player, out DiscoveryEstimate estimate))
@@ -58,14 +62,43 @@ internal static class CampaignTechnologyStatusPatch
     private static string StripNextDiscoverySuffix(string text)
         => string.IsNullOrWhiteSpace(text) ? string.Empty : NextDiscoverySuffixRegex.Replace(text, string.Empty);
 
+    internal static bool IsCampaignWorldReady()
+    {
+        Player? player = PlayerController.Instance;
+        return TryGetReadyCampaign(player, out _);
+    }
+
+    private static bool TryGetReadyCampaign(Player? player, out CampaignController? campaign)
+    {
+        campaign = CampaignController.Instance;
+        if (campaign?.CampaignData == null ||
+            player == null ||
+            player.technologies == null ||
+            GameManager.Instance == null ||
+            GameManager.Instance.CurrentState != GameManager.GameState.World)
+        {
+            return false;
+        }
+
+        try
+        {
+            int turn = campaign.CurrentDate.turn;
+            return turn >= 0 && turn <= MaxSaneCampaignTurn;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static bool TryGetNextDiscovery(Player player, out DiscoveryEstimate estimate)
     {
         estimate = default;
 
-        CampaignController? campaign = CampaignController.Instance;
-        if (campaign == null || player.technologies == null)
+        if (!TryGetReadyCampaign(player, out CampaignController? campaign))
             return false;
 
+        CampaignController safeCampaign = campaign!;
         int bestMonths = int.MaxValue;
         string bestName = string.Empty;
         List<string> candidateDetails = new();
@@ -88,7 +121,7 @@ internal static class CampaignTechnologyStatusPatch
             if (tech.progress >= ResearchCompleteProgress || tech.isResearched || !seenTypes.Add(type))
                 continue;
 
-            float speed = campaign.GetResearchSpeed(player, tech);
+            float speed = safeCampaign.GetResearchSpeed(player, tech);
             if (speed <= 0f)
                 continue;
 

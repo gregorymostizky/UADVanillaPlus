@@ -619,6 +619,346 @@ at minimum the design-viewer diagnostics/patches must be disabled separately
 from the test-battle launcher to prove whether the remaining blank screen is a
 save-state issue or another VP design-viewer/WIP interaction.
 
+The v0.3.73 pivot avoids campaign-launched battles entirely. Custom battle
+already has a vanilla shared-design library, but it is not the same data as
+`G.settings.customBattleShips` / `custom_battle_data.bin`. The working shared
+design path is `G.GameData.sharedDesignsPerNation`, populated by
+`GameData.LoadSharedDesigns()` from `*.bindesign` files under
+`Storage.designsPrefix` via `Storage.GetAllSharedDesignBinFileNames()` and
+`Storage.ReadPathByte(...)`. `BattleManager.LoadSharedDesigns(...)` consumes
+that `sharedDesignsPerNation` cache by `player.data.name`, then filters each
+`Ship.Store` by `YearCreated` and `shipType`.
+
+Custom Battle's shared-design filter is exact-year only. The nested
+`BattleManager+<>c__DisplayClass119_0.<LoadSharedDesigns>b__2(...)` predicate
+compares `Ship.Store.YearCreated` directly to the selected Custom Battle year
+before checking `shipType`, so an 1898 exported AI design will not be eligible
+in a 1900 Custom Battle even when the export is correct. This differs from
+`CampaignController.GetSharedDesign(...)`, whose vanilla predicate accepts
+nearby shared designs in roughly a three-year window. If exported campaign
+designs should be usable in later Custom Battle years, prefer a
+Custom-Battle-only lookback patch that accepts
+`store.YearCreated <= battleYear && store.YearCreated >= battleYear - N` while
+keeping the ship-type check. A three-year default mirrors vanilla campaign
+tolerance, but a ten-year backwards cap is also reasonable for the export-to-
+Custom-Battle workflow and still avoids pulling future designs into earlier
+battles. If exact-year priority matters, exact matches should be preferred
+before falling back to older eligible designs; otherwise widening the predicate
+can make vanilla choose from all matching designs in the range. A file fan-out
+workaround that writes
+duplicate `*.bindesign` files with rewritten `YearCreated` values can also make
+the unpatched loader see older designs, but it clutters the shared-design
+folder and needs cleanup/replacement logic.
+
+Exporting a selected campaign design into that library is much safer than
+trying to start a battle from the campaign screen: it does not enter battle,
+does not scope campaign players, does not touch `CampaignData.PlayersMajor`, and
+does not mutate campaign vessel/design stores. The campaign Designs tab should
+copy the selected live design through `Ship.ToStore(false)`, normalize it as a
+shared design, serialize it to a vanilla shared-design `*.bindesign` file, and
+update/reload `G.GameData.sharedDesignsPerNation` so the normal Custom Battle UI
+can consume it later.
+
+This shared-export path is now the preferred user-facing workflow for campaign
+design testing: open the campaign Designs tab, select a valid design, export it
+as shared, then leave the campaign and use vanilla Custom Battle with shared
+designs enabled. If this path fails, debug the generated `*.bindesign` files,
+`G.GameData.sharedDesignsPerNation`, and vanilla shared-design filtering first;
+do not revive the abandoned in-campaign battle launcher unless there is a new
+reason to accept campaign-state risk.
+
+The first shared-export attempt exposed two contract details that are easy to
+miss. First, do not clone a vanilla button and only change `TMP_Text`; some
+campaign buttons still expose their visible label as `UnityEngine.UI.Text`, so
+the cloned button can keep showing "Build Ship" even when its click handler is
+different. Set all child `TMP_Text` and `Text` labels, including inactive
+children, every time the export button is created or reused.
+
+Second, exporting into `G.settings.customBattleShips` can log success without
+making anything appear in the shared-design selector. That data is saved by
+`Settings.SaveCustomBattleData()` but it is not what
+`GameData.LoadSharedDesigns()` indexes for shared designs. The first runtime
+test showed `UADVP shared export` entries for Arizona and Warspite, followed by
+the game entering the vanilla Constructor path and generating a design anyway.
+The correct target is the same save path used by `Ui.SaveSharedDesign(...)`:
+`Storage.GetSavedDesignPath(...)`, `Storage.SaveSharedDesignShipByte(...)`, and
+the in-memory `G.GameData.sharedDesignsPerNation` tuple list.
+
+Shared-design exports must also be idempotent by shared row id. Vanilla
+`Ui.SaveSharedDesign(...)` checks the current nation's
+`G.GameData.sharedDesignsPerNation` list for an existing shared design whose
+`Ship.Store.id` matches the current constructor ship id, then calls
+`GameData.DeleteSharedDesign(...)` before saving the new file. `Storage.GetSavedDesignPath(...)`
+does not overwrite by itself; if a file name already exists, it appends a
+numeric suffix. A direct VP export that calls `SaveSharedDesignShipByte(...)`
+without deleting/replacing existing same-id entries can therefore create
+several `*.bindesign` files for the same exported design. Those duplicates can
+display as cloned shared designs, and delete actions become confusing because
+`GameData.DeleteSharedDesign(...)` is id/player based, not row/path based.
+
+Custom Battle rebuild adds a second sharp edge. Vanilla
+`BattleManager.LoadSharedDesigns(...)` materializes matching shared-design
+stores into temporary `Ship` objects and tracks them through Custom Battle
+state such as `customBattleSharedDesigns` and player design lists. After
+`Esc -> Rebuild Ships`, the Constructor screen can show those temporary
+skirmish ships, but a delete action can still route to the real
+`GameData.DeleteSharedDesign(...)` path because the ships retain shared-design
+identity. Do not treat the rebuild Constructor list as a safe temporary-only
+surface. Prefer clearing/deduplicating Custom Battle shared-design temp state on
+new skirmish/rebuild transitions and guard real shared-design deletion so it is
+only exposed from the intended shared-design management UI.
+
+A later repro confirmed there is a second persistent Custom Battle store:
+`Settings.SaveCustomBattleData()` writes `custom_battle_data.bin`, while shared
+designs live under `Designs\*.bindesign`. The vanilla start path calls
+`BattleManager.CustomBattleSavePlayerDesigns()` before
+`UpdateLoadingCustomBattle(...)`, and that method serializes Custom Battle
+player designs through `Ship.ToStore(false)` into
+`G.settings.customBattleShips` before `Settings.SaveCustomBattleData()`. As a
+result, a shared design that was selected/loaded into Custom Battle can survive
+as a Custom Battle cached design even after its original `*.bindesign` is
+deleted from the Shared Designs tab. The symptom is: Shared Designs no longer
+lists the ship, but Custom Battle still shows a cloned/saved design after a full
+restart. Logs from that state can include `LoadedShipForCustomBattle` errors
+such as `no such hull from save` or `no such PlayerData from save`, which point
+at stale `custom_battle_data.bin` entries rather than live shared-design files.
+Fixes should either prevent shared-design-derived temp ships from being saved
+into `customBattleShips`, or validate/prune `customBattleShips` on Custom Battle
+setup/load when the source shared design no longer exists or has invalid
+player/hull data.
+
+The Custom Battle cached-design store can also be repaired manually through the
+Custom Battle UI without deleting real Shared Designs. After disabling the VP
+custom-battle patch surface, Custom Battle still behaved badly until the stale
+existing Custom Battle designs were deleted from the Custom Battle design list.
+Those deletes left the same ships available in the Shared Designs tool, which
+confirms this is a separate `custom_battle_data.bin`/UI cache surface. When
+testing future fixes, first clear any stale Custom Battle cached designs or use
+a clean `custom_battle_data.bin`; otherwise a bad cached constructor design can
+masquerade as a current shared-export or fallback bug.
+
+A later VP 0.3.96 run separated persistent cache cleanup from live selected-slot
+state. With no manual override selected, Custom Battle reached `OnEnterState:
+Battle`. With shared-design overrides selected, the flow went
+`CustomBattleSetup -> LoadingCustom -> Constructor`, and VP logged
+`removed 2 chosen shared-design temp ships from BattleManager.customBattleSharedDesigns
+during before Custom Battle shared-design load` immediately before the fallback
+to Constructor. That means `BattleManager.customBattleSharedDesigns` is part of
+the live selected-design handoff during Start, not just stale cache. Do not
+prune `isShipChoisedInCustomBattle` ships from that live list inside
+`BattleManager.LoadSharedDesigns` or immediately after
+`CustomBattleSavePlayerDesigns`. Keep `custom_battle_data.bin` persistence
+cleanup separate, and only clear live shared-design temp state at setup/rebuild
+boundaries where vanilla is not actively consuming the selected override.
+
+After that live-prune call was removed, the failure shape changed but did not
+fully resolve: selected shared-design overrides survived into Constructor, and a
+`PlayerController.CanBuildShipsFromDesign` hook reported `canBuild=True` with an
+empty reason for both selected ships. The UI still showed `Design invalid: Main
+Tower _ is needed` when pressing Launch, which means that popup is produced by a
+different constructor/UI validation path. The same log showed a year mismatch
+after vanilla cloned the selected shared designs: the Arizona BB selected for the
+1900 battle re-serialized through `Ship.ToStore(false)` as `YearCreated=1907`,
+and the St. Louis CA accepted as an 1896 fallback re-serialized as
+`YearCreated=1902`. Export normalization currently sets `Ship.Store.YearCreated`
+but does not clearly normalize base `VesselEntityStore.dateCreated`,
+`dateFinished`, or `Ship.Store.dateCreatedRefit`. Future fixes should either
+normalize all serialized design date fields during export, or normalize a cloned
+load-time copy before Constructor/Custom Battle reserializes it. Add targeted
+logging around `Ui.CanNotBuildShipReasonToUi(...)` and
+`GameManager.CustomBattleConstructorFinished()` to capture the exact reason
+source, selected `Ui.mainShip`, part counts, required tower presence, and all
+date fields before changing broad validation rules.
+
+The next run showed that export-time date normalization alone is not stable
+across the Custom Battle epoch. VP exported St. Louis with `designYear=1896`,
+`storeYear=1896`, and `dateCreated=1896`, but once Custom Battle loaded the
+same selected shared design, `Ship.ToStore(false)` reported `YearCreated=1906`.
+Arizona exported as 1900 later reported 1910. This implies `GameDate.turn` is
+interpreted relative to the currently active Custom Battle start year, not as an
+absolute year, so a turn value that logs correctly in the campaign can shift
+when Custom Battle/Constructor reserializes it. If dates must be normalized,
+normalize a load-time clone against the active custom-battle epoch immediately
+before Constructor/launch consumption, or avoid sending selected shared designs
+through a Constructor reserialization path that rewrites `YearCreated` from
+epoch-relative `dateCreated`.
+
+That same run also proved the repeated `Main Tower - is needed` message is not
+just a missing rendered tower. After manually replacing the St. Louis tower,
+VP logged `parts=11; mainTower=Small Cage Mast IV; secondaryTower=Small Cage
+Mast II`, yet `Ui.CanNotBuildShipReasonToUi(...)` still produced `Main Tower -
+is needed`. The trace also repeatedly logged non-shared, non-selected
+Constructor ships such as `Belknap`, `Boston`, and `Des Moines` with `parts=0`,
+`isSharedDesign=False`, and `isShipChoisedInCustomBattle=False`. Those empty
+generated placeholders are likely still present in the Constructor validation
+set alongside the selected shared designs. The next fix should focus on the
+transition itself: either bypass Constructor for selected shared-design
+overrides and let `UpdateLoadingCustomBattle -> GetShipFromCustomBattle` consume
+the chosen shared designs directly, or remove/suppress the generated empty
+placeholder ships for slots already satisfied by selected shared designs before
+`GameManager.CustomBattleConstructorFinished()` validates the launch.
+
+The Custom Battle setup UI also distinguishes automatic slots from manually
+selected designs. A slot labeled `AI` is not necessarily an AI-controlled battle
+ship; in the setup grid it can mean the slot has no explicit manual design and
+will use automatic/AI selection. Clicking a shared/cached design card converts
+that slot into a manual design selection, after which the UI calls normal
+constructor/build validation such as `PlayerController.CanBuildShipsFromDesign`.
+That can make a previously launchable automatic slot turn red with constructor
+errors like `Design invalid: Main Tower _ is needed`. Treat exported campaign
+shared designs as launch candidates first, not necessarily editable/manual
+constructor designs. If manual selection is required, the loaded `Ship.Store`
+must have a valid non-empty owner, hull, required tower/component state, and
+constructor-valid tech context for the selected Custom Battle player/year.
+
+Exported shared designs need a stable non-zero `Ship.Store.id`, but campaign
+exports should not invent a non-empty `Ship.Store.designId`. A later runtime
+test on VP 0.3.95 exported three campaign designs, then hung when the main-menu
+Shared Designs UI opened the United States at the matching year. The decisive
+log line was `no such Ship from save: 45a442cf-3cb5-4ff2-a7b7-a58f24817b16`
+inside `GameManager.RefreshSharedDesign(...) -> Ship.FromStore(...)`, followed
+by a tight `Ui.UpdateConstructor()` `NullReferenceException` loop. That guid
+matched the VP-exported shared design's `designId`. This shows
+`designId` is treated as a reference to another ship/design during
+`Ship.FromStore(...)`; a campaign-only guid cannot be resolved from the
+main-menu shared-design load context. For VP campaign exports, use a stable
+`store.id` for replacement/deletion, clear or preserve-empty `store.designId`,
+and call `GameData.DeleteSharedDesign(store.id, ownerKey)` before writing the
+new `*.bindesign`.
+
+Opening a VP-exported design in the main-menu Shared Designs tool and pressing
+vanilla `Save` is also not a neutral round-trip check. In a 1902 Shared Designs
+screen, saving St. Louis changed the backing file from the original exported
+year to `1902 United States CA St. Louis (1896) - 2.bindesign`; the old-year
+file was removed/replaced while the current UI still showed an in-memory card
+with blue text. Treat that behavior as vanilla rewriting the shared design
+against the current constructor/shared-design context, not proof that the
+original export was absent. Use raw file presence plus `G.GameData.LoadSharedDesigns()`
+diagnostics to verify exports, and avoid asking users to re-save exported
+campaign designs inside the Shared Designs tool as a repair step.
+
+The Shared Designs tool is still useful as a comparer. Add temporary diagnostics
+around `GameData.LoadSharedDesigns()`, `GameManager.RefreshSharedDesign(...)`,
+`Ui.SaveSharedDesign(...)`, and `GameData.DeleteSharedDesign(...)` to dump the
+same normalized `Ship.Store` summary before and after vanilla opens/saves a
+design. Compare a normal vanilla-created shared design to a VP-exported campaign
+design at both stages: raw store from `G.GameData.sharedDesignsPerNation`, then
+live `Ship` after `Ship.FromStore(...)`/Constructor. The comparison should
+include `id`, `designId`, owner fields, `YearCreated`, all date turns, shared
+flags, status/refit/build flags, hull/type, part count, tower detection, techs,
+components, and the backing file path/name if available. This should be
+log-only until the exact divergence is known.
+
+A later diagnostic run made tech/availability context a plausible contributor,
+but also showed date/context drift more directly. The raw shared-design cache
+loaded `1900 United States BB Arizona (1900).bindesign` with `YearCreated=1910`,
+`1902 United States CA Brooklyn.bindesign` with `YearCreated=1914`, and
+`1902 United States CA St. Louis (1896) - 2.bindesign` with
+`YearCreated=1908`. Those values came from the serialized date turns, not the
+file names. VP-exported stores also carried campaign-ish state such as
+`repairingProgress=100`, Arizona `isRefitSimple=True`, and larger tech/component
+snapshots than 1890 baseline shared designs. The next diagnostic should log
+per-part availability against the active Custom Battle player/year, especially
+`Ship.IsComponentAvailable(...)` reason text for every placed part and the
+required tower parts, before treating `Main Tower - is needed` as literal.
+Guard these diagnostics carefully: `GameManager.RefreshSharedDesign(...)` can
+run before `G.ui.mainShip` is valid, and an unguarded `G.ui.mainShip` read caused
+a `Ui.get_mainShip` null reference in the logging patch.
+
+A direct vanilla-vs-VP comparison made the date-turn problem sharper. A vanilla
+generated/saved Kearsarge at 1900 saved with `dateCreated.turn=0`,
+`dateFinished.turn=0`, `dateCreatedRefit.turn=0`, `isRefitDesign=False`, and
+`isSharedDesign` simply flipped from false to true during `Ui.SaveSharedDesign`.
+The VP-exported Arizona raw file could show `YearCreated=1900`, but still kept
+campaign turn values such as `dateCreated.turn=127` and
+`dateFinished/dateCreatedRefit.turn=120`; when `GameManager.RefreshSharedDesign`
+opened that store at the 1900 Shared Designs screen, the live ship/store became
+1910 and kept `isRefitDesign=True`. This suggests export should not merely set
+`YearCreated`; it should scrub/normalize shared-design date turns and campaign
+refit/build/repair state to match vanilla shared-design expectations, or the
+Constructor will reinterpret the campaign turns in the current UI epoch.
+
+Saving both a vanilla-created Kearsarge and a VP-exported Arizona from the
+Shared Designs tool confirmed the difference. Vanilla deletes and rewrites the
+selected design during `Ui.SaveSharedDesign`, but Kearsarge stayed at
+`YearCreated=1900`, all date turns stayed `0`, and `isRefitDesign` stayed false.
+Arizona stayed as `YearCreated=1910`, kept turn `127/120/120`, and stayed
+`isRefitDesign=True`/`isRefitSimple=True` after the same save path. This means
+Shared Designer save does not repair campaign-exported lifecycle state. Also,
+`repairingProgress=100` is not decisive by itself: Kearsarge can have that value
+after vanilla re-save while remaining otherwise valid. Prioritize date turns and
+refit/simple-refit flags over repair progress when comparing exports.
+
+After normalizing the campaign export, a fresh Arizona export loaded much closer
+to vanilla shared-design shape: `YearCreated=1900`, all date turns `0`,
+`isRefitSimple=False`, build/refit/pause flags false, stable non-empty `id`, and
+empty `designId`. Opening and saving it in Shared Designs preserved those store
+values and no longer drifted to 1910. The remaining oddity in the live
+Constructor `Ship` object is `isRefitDesign=True` even though the backing store
+is no longer a simple refit. If Custom Battle still rejects or mutates the ship,
+that live flag is the next lifecycle field to clear or trace.
+
+A later Custom Battle test showed the next failure is not specific to the
+campaign export. Both normalized Arizona and vanilla-created Kearsarge were
+recognized as shared designs with real parts, but `GameManager.ToConstructor`
+was entered with `viewShip=<selected shared design>` and
+`selectedOverrides=<none>`. That means the current direct-launch guard, which
+only inspects `BattleManager.customBattleSharedDesigns`, runs too early or
+against the wrong container. Vanilla is routing the selected shared design
+through Constructor instead of consuming it directly. Pressing Constructor
+`Launch` then threw `Ui.<ConstructorUI>b__402_8` null references. Under the
+current export-to-shared-design workflow, VP should not limit Custom Battle to
+1v1. The user exports campaign designs as normal shared designs, then vanilla
+Custom Battle should be free to compose any player/enemy ship-type combination
+it normally supports. The safer next patch point is therefore still the Custom
+Battle `GameManager.ToConstructor(newShip=false, viewShip=chosen shared design,
+...)` handoff, but only as a compatibility bridge for selected shared-design
+cards that vanilla incorrectly routes into Constructor. It should not enforce a
+1v1 shape or strip extra requested slots. If extra slots produce empty
+constructor placeholders, treat that as part of the vanilla Custom Battle
+baseline to preserve or diagnose separately, not as a reason to narrow the
+export feature.
+
+A follow-up with Russia 1900, which had no VP-exported designs involved,
+reproduced the same broken Custom Battle path. The selected vanilla/generated
+shared design `Moskva` entered `GameManager.ToConstructor` with real parts
+(`parts=45`) and shared-design identity, but VP still logged
+`selectedOverrides=<none>` and the UI then entered Constructor. Pressing
+Constructor `Launch` produced repeated `Ui.<ConstructorUI>b__402_8` null
+references, while extra requested slots produced empty placeholder designs such
+as `Perkins`/`Wisconsin`. This confirms the current broad Custom Battle patches
+are disturbing normal Custom Battle behavior, not just exported campaign
+designs. Before adding another launch fix, temporarily disable the direct-launch
+and `custom_battle_data.bin` pruning hooks and verify vanilla Custom Battle can
+again create/select new designs for nations with no exported files. After that
+baseline is clean, reintroduce only the minimum compatibility needed for shared
+design selection, while preserving vanilla's ability to handle arbitrary Custom
+Battle ship combinations.
+
+VP 0.3.106 disabled the broad prune/direct-launch hooks, but Custom Battle still
+was not back to a true vanilla baseline because the `CustomBattleSharedDesign...`
+file remained loaded for the older-year fallback and diagnostics. The live log
+still reported `patched older-year Custom Battle fallback`, then started
+`russia,1900:1BB,1DD/italy,1900:1BB`, routed `Moskva` through
+`GameManager.ToConstructor`, and repeated `Ui.<ConstructorUI>b__402_8` when
+Constructor `Launch` was pressed. For the next isolation pass, disable the
+entire custom-battle shared-design patch file or every `[HarmonyPatch]` in it,
+including the older-year fallback and diagnostic constructor patches, then test
+plain vanilla Custom Battle behavior with both a simple setup and a mixed setup
+such as `1BB,1DD` vs `1BB`. Only re-enable the ten-year fallback after the
+unpatched Custom Battle path is confirmed healthy.
+
+The follow-up baseline did work once the whole custom-battle shared-design patch
+surface was disabled and stale Custom Battle cached designs were removed through
+the Custom Battle UI. The remaining regression is expected: older shared designs
+are no longer eligible in later battle years because vanilla Custom Battle is
+exact-year only. Re-enable only the older-year fallback next. Do not flip a
+single global `CustomBattleSharedDesignPatchSurface.Enabled` switch if that also
+reactivates diagnostics, pruning, or direct-launch hooks. Prefer separate gates:
+enable only `CustomBattleSharedDesignLoadScopePatch` and
+`CustomBattleSharedDesignYearFallbackPatch`; leave constructor diagnostics,
+`custom_battle_data.bin` pruning, and direct-launch/doBuild patches disabled.
+
 Scope cleanup must cover more than `_UpdateLoadingCustomBattleFromSave`. The
 risky path continues through `GameManager.UpdateLoadingBattle(save)` and
 `PrepareBattleFromSave(save)`, so failed scene preparation needs a watchdog or

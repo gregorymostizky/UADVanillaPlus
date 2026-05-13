@@ -13,12 +13,16 @@ namespace UADVanillaPlus.Harmony;
 [HarmonyPatch(typeof(MapUI))]
 internal static class CampaignPortShipCountPatch
 {
-    private const float SafetyRefreshIntervalSeconds = 2f;
+    private const float SafetyRefreshIntervalSeconds = 10f;
     private static readonly Color OccupiedPortLabelColor = new(0.08f, 0.08f, 0.08f, 1f);
     private static readonly Color EmptyPortLabelColor = new(0.18f, 0.18f, 0.18f, 1f);
     private static readonly Regex ShipCountSuffixRegex = new(@"\s*\(\d+\)\s*$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
     private static readonly Regex BoldWrapperRegex = new(@"^\s*<b>(?<text>.*)</b>\s*$", RegexOptions.CultureInvariant | RegexOptions.Compiled | RegexOptions.Singleline);
     private static readonly Dictionary<IntPtr, PortLabelStyle> OriginalLabelStyles = new();
+    private static readonly List<PortLabelEntry> CachedPortLabels = new();
+    private static IntPtr cachedMapUiPointer;
+    private static IntPtr cachedPortsRootPointer;
+    private static bool portLabelCacheDirty = true;
     private static bool countsDirty = true;
     private static float nextSafetyRefreshTime;
     private static string lastLoggedSummary = string.Empty;
@@ -27,6 +31,7 @@ internal static class CampaignPortShipCountPatch
     [HarmonyPatch(nameof(MapUI.InitPortsUI))]
     internal static void InitPortsUIPostfix(MapUI __instance)
     {
+        RebuildPortLabelCache(__instance);
         countsDirty = true;
         RefreshPortLabels(__instance);
     }
@@ -35,6 +40,7 @@ internal static class CampaignPortShipCountPatch
     [HarmonyPatch(nameof(MapUI.UpdatePortsOwnerUI))]
     internal static void UpdatePortsOwnerUIPostfix(MapUI __instance)
     {
+        portLabelCacheDirty = true;
         countsDirty = true;
         RefreshPortLabels(__instance);
     }
@@ -60,6 +66,43 @@ internal static class CampaignPortShipCountPatch
     internal static void MarkCountsDirty()
         => countsDirty = true;
 
+    private static List<PortLabelEntry> GetPortLabelCache(MapUI mapUi)
+    {
+        IntPtr mapKey = mapUi.Pointer;
+        IntPtr rootKey = mapUi.PortsRoot != null ? mapUi.PortsRoot.Pointer : IntPtr.Zero;
+        if (portLabelCacheDirty ||
+            cachedMapUiPointer != mapKey ||
+            cachedPortsRootPointer != rootKey ||
+            CachedPortLabels.Count == 0)
+        {
+            RebuildPortLabelCache(mapUi);
+        }
+
+        return CachedPortLabels;
+    }
+
+    private static void RebuildPortLabelCache(MapUI? mapUi)
+    {
+        CachedPortLabels.Clear();
+        portLabelCacheDirty = false;
+        cachedMapUiPointer = mapUi?.Pointer ?? IntPtr.Zero;
+        cachedPortsRootPointer = mapUi?.PortsRoot != null ? mapUi.PortsRoot.Pointer : IntPtr.Zero;
+
+        if (mapUi?.PortsRoot == null)
+            return;
+
+        foreach (PortUI portUi in mapUi.PortsRoot.GetComponentsInChildren<PortUI>(true))
+        {
+            if (portUi == null || portUi.PortName == null)
+                continue;
+
+            CachedPortLabels.Add(new PortLabelEntry(
+                portUi.Id ?? string.Empty,
+                portUi.PortName,
+                StripShipCountDecoration(portUi.PortName.text)));
+        }
+    }
+
     private static bool RefreshPortLabels(MapUI? mapUi)
     {
         try
@@ -67,27 +110,45 @@ internal static class CampaignPortShipCountPatch
             if (mapUi?.PortsRoot == null)
                 return false;
 
+            List<PortLabelEntry> portLabels = GetPortLabelCache(mapUi);
             Dictionary<string, int> countsByPort = BuildCampaignPortCounts();
             int decoratedPorts = 0;
+            bool sawDestroyedLabel = false;
 
-            foreach (PortUI portUi in mapUi.PortsRoot.GetComponentsInChildren<PortUI>(true))
+            foreach (PortLabelEntry entry in portLabels)
             {
-                if (portUi == null || portUi.PortName == null)
+                TMP_Text? label = entry.Label;
+                if (label == null)
+                {
+                    sawDestroyedLabel = true;
                     continue;
+                }
 
                 int count = 0;
-                string portId = portUi.Id ?? string.Empty;
-                if (!string.IsNullOrEmpty(portId))
-                    countsByPort.TryGetValue(portId, out count);
+                if (!string.IsNullOrEmpty(entry.PortId))
+                    countsByPort.TryGetValue(entry.PortId, out count);
 
-                string baseName = StripShipCountDecoration(portUi.PortName.text);
-                portUi.PortName.richText = true;
-                ApplyShipCountTextStyle(portUi.PortName, count > 0);
-                portUi.PortName.text = count > 0 ? $"<b>{baseName} ({count})</b>" : baseName;
+                if (!string.Equals(label.text, entry.LastAppliedText, StringComparison.Ordinal))
+                    entry.BaseName = StripShipCountDecoration(label.text);
+
+                string desiredText = count > 0 ? $"<b>{entry.BaseName} ({count})</b>" : entry.BaseName;
+                if (entry.LastCount != count ||
+                    !label.richText ||
+                    !string.Equals(label.text, desiredText, StringComparison.Ordinal))
+                {
+                    label.richText = true;
+                    ApplyShipCountTextStyle(label, count > 0);
+                    label.text = desiredText;
+                    entry.LastCount = count;
+                    entry.LastAppliedText = desiredText;
+                }
 
                 if (count > 0)
                     decoratedPorts++;
             }
+
+            if (sawDestroyedLabel)
+                portLabelCacheDirty = true;
 
             LogSummaryOnce(countsByPort, decoratedPorts);
             return true;
@@ -203,6 +264,22 @@ internal static class CampaignPortShipCountPatch
         {
             FontStyle = fontStyle;
             FontWeight = fontWeight;
+        }
+    }
+
+    private sealed class PortLabelEntry
+    {
+        internal readonly string PortId;
+        internal readonly TMP_Text Label;
+        internal string BaseName;
+        internal int LastCount = int.MinValue;
+        internal string LastAppliedText = string.Empty;
+
+        internal PortLabelEntry(string portId, TMP_Text label, string baseName)
+        {
+            PortId = portId;
+            Label = label;
+            BaseName = baseName;
         }
     }
 

@@ -2,7 +2,7 @@
 
 UAD Vanilla Plus (`UAD:VP`) is a lightweight mod for Ultimate Admiral: Dreadnoughts that keeps the base game feel while adding small quality-of-life improvements.
 
-Current version: `0.3.72`
+Current version: `0.4.4`
 
 ## Philosophy
 
@@ -67,7 +67,7 @@ Start the game normally after copying the DLL. If the mod loads, `UAD:VP` and th
 
 - **CA+ torpedo restriction**: optionally disallow torpedo launchers on heavy cruisers, battlecruisers, and battleships.
 - **Obsolete tech and hull retention**: optional player-only setting to keep already researched obsolete hulls and components available in ship design while AI design availability stays vanilla. This defaults to vanilla.
-- **Superstructure Refits**: optional player-only experimental fallback for researched same-class-group main towers, secondary towers, and funnels when vanilla only blocks exact hull-era compatibility. Refit designs need this option; normal designs also need Obsolete Tech & Hulls enabled.
+- **Superstructure Compatibility**: optional player-only `Unrestricted` mode that lets researched main towers, secondary towers, and funnels be used beyond their vanilla hull-family compatibility. Tech, country, ship class, mount, and placement checks still apply.
 
 ### Battle
 
@@ -84,13 +84,13 @@ Start the game normally after copying the DLL. If the mod loads, `UAD:VP` and th
 ### Experimental
 
 - **Map Geometry**: optional `Disc World` seamless visual wrap-around for the campaign map at the Pacific edge, including source map material detail on side maps, clickable port/task-force/mission marker copies, wrapped task-force route visuals, and wrapped-map movement clicks/destinations. The `Flat Earth` setting keeps vanilla map geometry and remains the default.
-- **Experimental Nation Ship Paints**: optional nation-themed ship paint schemes for designer previews and battles. This is disabled by default so vanilla ship materials remain unchanged unless players opt in.
+- **Experimental Nation Ship Paints**: optional nation-themed ship paint schemes for designer previews and battles, with editable per-nation paint strings for hull, superstructure, and gun colors. This is disabled by default so vanilla ship materials remain unchanged unless players opt in.
 
 ## Known Issues
 
 - Map Geometry's `Disc World` mode is still experimental. Map surface/material details, labels, political overlays, grid visuals, wrapped port/task-force/mission marker clicks, task-force route visuals, and wrapped-map movement destination clicks wrap. Country/state border-line rendering on side maps is still under diagnostic investigation, and some less-common map interactions and marker types may still use vanilla map behavior.
 - Experimental Nation Ship Paints is still being tuned for visual consistency and battle-load performance. Runtime texture recoloring remains disabled; the option currently uses material color clones only when explicitly enabled.
-- Superstructure Refits is intentionally conservative, but newly exposed tower and funnel combinations may still need class-group tightening or a denylist after broader campaign testing.
+- Superstructure Compatibility's `Unrestricted` mode is intentionally conservative, but newly exposed tower and funnel combinations may still need class-group tightening or a denylist after broader campaign testing.
 
 ## Building And Running From Source
 

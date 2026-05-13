@@ -20,6 +20,7 @@ internal static class InGameOptionsMenuPatch
         Campaign,
         ShipDesign,
         Experimental,
+        NationShipPaints,
     }
 
     private const string ButtonName = "UADVP_OptionsButton";
@@ -39,6 +40,7 @@ internal static class InGameOptionsMenuPatch
     private const string MineWarfareOptionName = "UADVP_Option_MineWarfare";
     private const string SubmarineWarfareOptionName = "UADVP_Option_SubmarineWarfare";
     private const string ExperimentalNationShipPaintsOptionName = "UADVP_Option_ExperimentalNationShipPaints";
+    private const string NationShipPaintsSectionName = "UADVP_Option_NationShipPaints";
 
     private static readonly Color Background = new(0f, 0f, 0f, 0.94f);
     private static readonly Color RowBackground = new(0.09f, 0.09f, 0.09f, 0.96f);
@@ -192,6 +194,7 @@ internal static class InGameOptionsMenuPatch
     {
         ClearChildren(window);
         ConfigureWindow(window);
+        NormalizeSelectedSection();
 
         contentRoot = new GameObject(ContentName);
         contentRoot.transform.SetParent(window.transform, false);
@@ -247,12 +250,14 @@ internal static class InGameOptionsMenuPatch
         layout.childControlWidth = true;
         layout.childForceExpandHeight = false;
         layout.childForceExpandWidth = true;
-        AddLayout(sections, minWidth: 112f, preferredWidth: 112f, flexibleHeight: 1f);
+        AddLayout(sections, minWidth: 122f, preferredWidth: 122f, flexibleHeight: 1f);
 
         AddSectionButton(sections.transform, Section.Battle, "Battle");
         AddSectionButton(sections.transform, Section.Campaign, "Campaign");
         AddSectionButton(sections.transform, Section.ShipDesign, "Ship Design");
         AddSectionButton(sections.transform, Section.Experimental, "Experimental");
+        if (ModSettings.ExperimentalNationShipPaintsEnabled)
+            AddSectionButton(sections.transform, Section.NationShipPaints, "Ship Paints");
     }
 
     private static void BuildSectionPane(Transform parent)
@@ -373,10 +378,10 @@ internal static class InGameOptionsMenuPatch
                 AddSegmentedOption(
                     pane.transform,
                     SuperstructureRefitsOptionName,
-                    "Superstructure Refits",
-                    "Enabled is an experimental player-only fallback for researched main towers, secondary towers, and funnels when vanilla only blocks exact hull-era compatibility. Tech, country, ship class group, mount count, and placement checks remain vanilla.",
+                    "Superstructure Compatibility",
+                    "Unrestricted lets researched main towers, secondary towers, and funnels be used beyond their vanilla hull-family compatibility. Tech, country, ship class, mount, and placement checks still apply.",
                     true,
-                    ("Enabled", ModSettings.SuperstructureRefitsEnabled, () => SetSuperstructureRefitsMode(true)),
+                    ("Unrestricted", ModSettings.SuperstructureRefitsEnabled, () => SetSuperstructureRefitsMode(true)),
                     ("Vanilla", !ModSettings.SuperstructureRefitsEnabled, () => SetSuperstructureRefitsMode(false)));
                 break;
             case Section.Experimental:
@@ -392,12 +397,101 @@ internal static class InGameOptionsMenuPatch
                     pane.transform,
                     ExperimentalNationShipPaintsOptionName,
                     "Experimental Nation Ship Paints",
-                    "Enabled applies experimental nation-themed ship paint schemes in designer previews and battles. Visual style and battle-load performance are still being tuned. Vanilla keeps the game's original ship materials.",
+                    "On applies experimental nation-themed ship paint schemes in designer previews and battles. Visual style and battle-load performance are still being tuned. Off keeps the game's original ship materials.",
                     true,
-                    ("Enabled", ModSettings.ExperimentalNationShipPaintsEnabled, () => SetExperimentalNationShipPaintsMode(true)),
-                    ("Vanilla", !ModSettings.ExperimentalNationShipPaintsEnabled, () => SetExperimentalNationShipPaintsMode(false)));
+                    ("Off", !ModSettings.ExperimentalNationShipPaintsEnabled, () => SetExperimentalNationShipPaintsMode(false)),
+                    ("On", ModSettings.ExperimentalNationShipPaintsEnabled, () => SetExperimentalNationShipPaintsMode(true)));
+                break;
+            case Section.NationShipPaints:
+                BuildNationShipPaintsPane(pane.transform);
                 break;
         }
+    }
+
+    private static void BuildNationShipPaintsPane(Transform parent)
+    {
+        DesignHullColorProofPatch.RefreshNationPaintSettingsCache("options menu");
+        AddText(parent, "Use hull=#RRGGBB; super=#RRGGBB; gun=#RRGGBB. Empty uses the built-in default.", 12, TextAnchor.MiddleLeft);
+
+        foreach (DesignHullColorProofPatch.NationPaintUiInfo nation in DesignHullColorProofPatch.NationPaintOptions())
+            AddNationShipPaintRow(parent, nation);
+    }
+
+    private static void AddNationShipPaintRow(Transform parent, DesignHullColorProofPatch.NationPaintUiInfo nation)
+    {
+        GameObject row = new($"{NationShipPaintsSectionName}_{nation.Key}");
+        row.transform.SetParent(parent, false);
+        Image rowImage = row.AddComponent<Image>();
+        rowImage.color = RowBackground;
+
+        HorizontalLayoutGroup rowLayout = row.AddComponent<HorizontalLayoutGroup>();
+        rowLayout.padding = new RectOffset { left = 8, right = 8, top = 2, bottom = 2 };
+        rowLayout.spacing = 8f;
+        rowLayout.childAlignment = TextAnchor.MiddleCenter;
+        rowLayout.childControlHeight = true;
+        rowLayout.childControlWidth = true;
+        rowLayout.childForceExpandHeight = false;
+        rowLayout.childForceExpandWidth = false;
+        AddLayout(row, minHeight: 30f, preferredHeight: 30f, flexibleWidth: 1f);
+
+        Text label = AddText(row.transform, $"{nation.Label}:", 12, TextAnchor.MiddleLeft);
+        AddLayout(label.gameObject, minWidth: 120f, preferredWidth: 120f, flexibleWidth: 0f);
+
+        InputField input = AddPaintStringInput(row.transform, nation);
+        input.onEndEdit.RemoveAllListeners();
+        input.onEndEdit.AddListener(new System.Action<string>(value => SetNationShipPaintString(nation, value)));
+
+        AddActionButton(row.transform, "Reset", () => ResetNationShipPaintString(nation), width: 72f);
+    }
+
+    private static InputField AddPaintStringInput(Transform parent, DesignHullColorProofPatch.NationPaintUiInfo nation)
+    {
+        GameObject fieldObject = new($"UADVP_PaintInput_{nation.Key}");
+        fieldObject.transform.SetParent(parent, false);
+        Image image = fieldObject.AddComponent<Image>();
+        image.color = new Color(0.03f, 0.03f, 0.03f, 0.95f);
+        AddLayout(fieldObject, minWidth: 430f, preferredHeight: 24f, flexibleWidth: 1f);
+
+        InputField input = fieldObject.AddComponent<InputField>();
+        input.targetGraphic = image;
+        input.lineType = InputField.LineType.SingleLine;
+        input.contentType = InputField.ContentType.Standard;
+        input.characterValidation = InputField.CharacterValidation.None;
+        input.characterLimit = 96;
+        input.selectionColor = new Color(0.6f, 0.52f, 0.25f, 0.65f);
+
+        Text text = AddInputText(fieldObject.transform, "Text", Color.white, nation.Value, 12);
+        Text placeholder = AddInputText(fieldObject.transform, "Placeholder", new Color(0.72f, 0.72f, 0.68f, 0.72f), nation.Template, 12);
+        input.textComponent = text;
+        input.placeholder = placeholder;
+        input.text = nation.Value;
+        return input;
+    }
+
+    private static Text AddInputText(Transform parent, string name, Color color, string text, int fontSize)
+    {
+        GameObject textObject = new(name);
+        textObject.transform.SetParent(parent, false);
+        Text uiText = textObject.AddComponent<Text>();
+        uiText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        uiText.fontSize = fontSize;
+        uiText.color = color;
+        uiText.alignment = TextAnchor.MiddleLeft;
+        uiText.text = text;
+        uiText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        uiText.verticalOverflow = VerticalWrapMode.Overflow;
+        uiText.raycastTarget = false;
+
+        RectTransform? rect = textObject.GetComponent<RectTransform>();
+        if (rect != null)
+        {
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = new Vector2(8f, 1f);
+            rect.offsetMax = new Vector2(-8f, -1f);
+        }
+
+        return uiText;
     }
 
     private static void AddSegmentedOption(Transform parent, string name, string label, string tooltip, bool interactable, params (string Label, bool Selected, Action OnPress)[] segments)
@@ -490,6 +584,9 @@ internal static class InGameOptionsMenuPatch
 
     private static void SelectSection(Section section)
     {
+        if (section == Section.NationShipPaints && !ModSettings.ExperimentalNationShipPaintsEnabled)
+            section = Section.Experimental;
+
         selectedSection = section;
         RefreshMenu();
     }
@@ -558,7 +655,7 @@ internal static class InGameOptionsMenuPatch
         if (ModSettings.SuperstructureRefitsEnabled != enabled)
         {
             ModSettings.SuperstructureRefitsEnabled = enabled;
-            RefreshConstructorAvailabilityUi("Superstructure Refits");
+            RefreshConstructorAvailabilityUi("Superstructure Compatibility");
         }
 
         RefreshMenu();
@@ -596,6 +693,28 @@ internal static class InGameOptionsMenuPatch
             ModSettings.ExperimentalNationShipPaintsEnabled = enabled;
             DesignHullColorProofPatch.ApplyCurrentSetting();
         }
+
+        if (enabled)
+            selectedSection = Section.NationShipPaints;
+        else if (selectedSection == Section.NationShipPaints)
+            selectedSection = Section.Experimental;
+
+        RefreshMenu();
+        RefreshLauncherButton();
+    }
+
+    private static void SetNationShipPaintString(DesignHullColorProofPatch.NationPaintUiInfo nation, string value)
+    {
+        if (ModSettings.SetNationShipPaintString(nation.Key, value ?? string.Empty))
+            DesignHullColorProofPatch.ApplyNationPaintSettingsChange($"{nation.Label} string changed");
+
+        RefreshLauncherButton();
+    }
+
+    private static void ResetNationShipPaintString(DesignHullColorProofPatch.NationPaintUiInfo nation)
+    {
+        if (ModSettings.SetNationShipPaintString(nation.Key, nation.Template))
+            DesignHullColorProofPatch.ApplyNationPaintSettingsChange($"{nation.Label} reset");
 
         RefreshMenu();
         RefreshLauncherButton();
@@ -759,6 +878,12 @@ internal static class InGameOptionsMenuPatch
         BuildSettingsWindow(window);
     }
 
+    private static void NormalizeSelectedSection()
+    {
+        if (selectedSection == Section.NationShipPaints && !ModSettings.ExperimentalNationShipPaintsEnabled)
+            selectedSection = Section.Experimental;
+    }
+
     private static void RefreshLauncherButton()
     {
         if (launcherButton == null)
@@ -779,7 +904,7 @@ internal static class InGameOptionsMenuPatch
     private static void AddLauncherTooltip(GameObject buttonObject)
         => AddTooltip(
             buttonObject,
-            $"UAD:VP Options\nBattle Weather: {BattleWeatherModeText(ModSettings.BattleWeatherAlwaysSunny)}\nAccuracy Penalties: {DesignAccuracyPenaltiesModeText(ModSettings.DesignAccuracyPenaltyMode)}\nPort Strike: {PortStrikeModeText(ModSettings.PortStrikeBalanced)}\nSuspend Dock Overcapacity: {ShipyardCapacityModeText(ModSettings.ShipyardCapacityBalanced)}\nCanal Openings: {CanalOpeningModeText(ModSettings.EarlyCanalOpeningsEnabled)}\nTechnology Spread: {TechnologySpreadModeText(ModSettings.TechnologySpread)}\nCampaign End Date: {CampaignEndDateModeText(ModSettings.CampaignEndDateEnabled)}\nMine Warfare: {MineWarfareModeText(ModSettings.MineWarfareDisabled)}\nSubmarine Warfare: {SubmarineWarfareModeText(ModSettings.SubmarineWarfareDisabled)}\nCA+ Torpedoes: {MajorShipTorpedoesModeText(ModSettings.MajorShipTorpedoesRestricted)}\nObsolete Tech & Hulls: {ObsoleteDesignRetentionModeText(ModSettings.ObsoleteDesignRetentionEnabled)}\nSuperstructure Refits: {SuperstructureRefitsModeText(ModSettings.SuperstructureRefitsEnabled)}\nMap Geometry: {CampaignMapWraparoundModeText(ModSettings.CampaignMapWraparoundEnabled)}\nExperimental Nation Ship Paints: {ExperimentalNationShipPaintsModeText(ModSettings.ExperimentalNationShipPaintsEnabled)}",
+            $"UAD:VP Options\nBattle Weather: {BattleWeatherModeText(ModSettings.BattleWeatherAlwaysSunny)}\nAccuracy Penalties: {DesignAccuracyPenaltiesModeText(ModSettings.DesignAccuracyPenaltyMode)}\nPort Strike: {PortStrikeModeText(ModSettings.PortStrikeBalanced)}\nSuspend Dock Overcapacity: {ShipyardCapacityModeText(ModSettings.ShipyardCapacityBalanced)}\nCanal Openings: {CanalOpeningModeText(ModSettings.EarlyCanalOpeningsEnabled)}\nTechnology Spread: {TechnologySpreadModeText(ModSettings.TechnologySpread)}\nCampaign End Date: {CampaignEndDateModeText(ModSettings.CampaignEndDateEnabled)}\nMine Warfare: {MineWarfareModeText(ModSettings.MineWarfareDisabled)}\nSubmarine Warfare: {SubmarineWarfareModeText(ModSettings.SubmarineWarfareDisabled)}\nCA+ Torpedoes: {MajorShipTorpedoesModeText(ModSettings.MajorShipTorpedoesRestricted)}\nObsolete Tech & Hulls: {ObsoleteDesignRetentionModeText(ModSettings.ObsoleteDesignRetentionEnabled)}\nSuperstructure Compatibility: {SuperstructureRefitsModeText(ModSettings.SuperstructureRefitsEnabled)}\nMap Geometry: {CampaignMapWraparoundModeText(ModSettings.CampaignMapWraparoundEnabled)}\nExperimental Nation Ship Paints: {ExperimentalNationShipPaintsModeText(ModSettings.ExperimentalNationShipPaintsEnabled)}",
             () => launcherButton != null && launcherButton.interactable);
 
     private static void AddTooltip(GameObject target, string text, Func<bool>? canShow = null)
@@ -836,7 +961,7 @@ internal static class InGameOptionsMenuPatch
         rect.anchorMax = new Vector2(0.5f, 0.5f);
         rect.pivot = new Vector2(0.5f, 0.5f);
         rect.anchoredPosition = Vector2.zero;
-        rect.sizeDelta = new Vector2(980f, 450f);
+        rect.sizeDelta = new Vector2(980f, 560f);
     }
 
     private static void MatchButtonSizing(GameObject target, GameObject template)
@@ -930,6 +1055,7 @@ internal static class InGameOptionsMenuPatch
             Section.Campaign => "Campaign",
             Section.ShipDesign => "Ship Design",
             Section.Experimental => "Experimental",
+            Section.NationShipPaints => "Nation Ship Paints",
             _ => "Options",
         };
 
