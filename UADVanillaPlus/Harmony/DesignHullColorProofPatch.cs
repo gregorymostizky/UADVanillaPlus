@@ -278,7 +278,7 @@ internal static class DesignHullColorProofPatch
     private static int BattleRepaintLogCount;
     private static int BattleCountryMapLogCount;
     private static int BattleRepaintCoalesceLogCount;
-    private static int BattleRepaintBudgetLogCount;
+    private static int BattleRepaintThresholdLogCount;
     private static int GeneratedObjectCleanupLogCount;
     private static int DamagePaintPolicyLogCount;
     private static int LodRendererLogCount;
@@ -292,7 +292,7 @@ internal static class DesignHullColorProofPatch
     private const int MaxApplicationLogsPerArea = 4;
     private const int MaxLodRendererLogs = 8;
     private const int MaxMissedGunLodRendererLogs = 12;
-    private const int MaxBattleRepaintCandidates = 240;
+    private const int BattleRepaintCandidateWarningThreshold = 240;
     private const int BattleRepaintBattleReadyWaitAttempts = 60;
     private const float BattleRepaintBattleReadyWaitDelaySeconds = 0.2f;
     private const float BattleRepaintRetryDelaySeconds = 0.85f;
@@ -657,31 +657,28 @@ internal static class DesignHullColorProofPatch
             AppliedRendererSignatureByPart.Clear();
 
             int repaintCandidates = 0;
-            int skippedByBudget = 0;
+            int candidatesOverThreshold = 0;
             foreach (Part part in parts)
             {
                 if (part == null || PaintAreaFor(part) == null)
                     continue;
 
-                if (repaintCandidates >= MaxBattleRepaintCandidates)
-                {
-                    skippedByBudget++;
-                    continue;
-                }
-
                 repaintCandidates++;
+                if (repaintCandidates > BattleRepaintCandidateWarningThreshold)
+                    candidatesOverThreshold++;
+
                 TryApplyProofColor(part, context, force: true);
             }
 
             if (BattleRepaintLogCount++ < 4)
             {
                 Melon<UADVanillaPlusMod>.Logger.Msg(
-                    $"UADVP ship paint proof: repainted loaded parts during {context}; parts={parts.Length}, candidates={repaintCandidates}, skippedByBudget={skippedByBudget}.");
+                    $"UADVP ship paint proof: repainted loaded parts during {context}; parts={parts.Length}, candidates={repaintCandidates}, overThreshold={candidatesOverThreshold}.");
             }
-            else if (skippedByBudget > 0 && BattleRepaintBudgetLogCount++ < 4)
+            else if (candidatesOverThreshold > 0 && BattleRepaintThresholdLogCount++ < 4)
             {
                 Melon<UADVanillaPlusMod>.Logger.Warning(
-                    $"UADVP ship paint proof: repaint budget skipped {skippedByBudget} candidate part(s) during {context}; budget={MaxBattleRepaintCandidates}.");
+                    $"UADVP ship paint proof: repaint candidate count exceeded threshold by {candidatesOverThreshold} during {context}; threshold={BattleRepaintCandidateWarningThreshold}.");
             }
         }
         catch (Exception ex)
@@ -1207,11 +1204,8 @@ internal static class DesignHullColorProofPatch
             if (paintArea == PaintArea.Gun)
                 LogMissedGunChildRenderers(part, seen);
 
-            if (IsFunnelOrSmokestack(part) || paintArea == PaintArea.Gun)
-            {
-                foreach (Renderer lodRenderer in LodRenderers(part, seen))
-                    yield return lodRenderer;
-            }
+            foreach (Renderer lodRenderer in LodRenderers(part, seen))
+                yield return lodRenderer;
 
             yield break;
         }
@@ -1226,19 +1220,6 @@ internal static class DesignHullColorProofPatch
             if (renderer != null && seen.Add(renderer.GetInstanceID()))
                 yield return renderer;
         }
-    }
-
-    private static bool IsFunnelOrSmokestack(Part part)
-    {
-        PartData? data = part.data;
-        if (data == null)
-            return false;
-
-        if (data.isFunnel)
-            return true;
-
-        string text = $"{data.name ?? string.Empty} {data.nameUi ?? string.Empty}";
-        return ContainsAny(text, new[] { "funnel", "smokestack", "smoke_stack", "smoke stack" });
     }
 
     private static IEnumerable<Renderer> LodRenderers(Part part, HashSet<int> seen)
