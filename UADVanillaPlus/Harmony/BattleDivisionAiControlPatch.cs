@@ -21,12 +21,20 @@ internal static class BattleDivisionAiControlPatch
 
     private static readonly string[] PreferredTemplateButtonNames =
     {
-        "Scout",
-        "Screen",
-        "Follow",
-        "Sail",
         "Retreat",
-        "Movement"
+        "Sail",
+        "Screen",
+        "Scout",
+        "Follow"
+    };
+
+    private static readonly string[] ModeSelectorButtonNames =
+    {
+        "Sail",
+        "Screen",
+        "Scout",
+        "Follow",
+        "Retreat"
     };
 
     private static readonly MemberInfo? BaseOrdersMember = FindInstanceMember(typeof(Ui), "baseOrders");
@@ -51,7 +59,6 @@ internal static class BattleDivisionAiControlPatch
     private static bool loggedButtonReady;
     private static bool loggedInactiveButtonParent;
     private static bool loggedHotkeyFailed;
-    private static bool loggedDivisionCardCorrectionFailed;
 
     internal static bool IsShipAiControlledByVp(Ship ship)
     {
@@ -134,7 +141,7 @@ internal static class BattleDivisionAiControlPatch
             loggedButtonReady = true;
             Transform? parent = button.transform.parent;
             Melon<UADVanillaPlusMod>.Logger.Msg(
-                $"UADVP battle AI control: AI button ready for {divisions.Count} selected division(s); root={orderContext.SourceName}/{orderContext.Root.name}, rootActive={orderContext.Root.activeInHierarchy}, parent={parent?.name ?? "<none>"}, parentActive={parent?.gameObject.activeInHierarchy ?? false}, buttonActive={button.gameObject.activeSelf}.");
+                $"UADVP battle AI control: AI button ready for {divisions.Count} selected division(s); root={orderContext.SourceName}/{orderContext.Root.name}, rootActive={orderContext.Root.activeInHierarchy}, parent={parent?.name ?? "<none>"}, parentActive={parent?.gameObject.activeInHierarchy ?? false}, template={orderContext.Template.gameObject.name}, anchor={orderContext.Anchor?.gameObject.name ?? "<none>"}, buttonActive={button.gameObject.activeSelf}.");
         }
 
         if (canToggle && !loggedInactiveButtonParent && !(button.transform.parent?.gameObject.activeInHierarchy ?? false))
@@ -142,35 +149,6 @@ internal static class BattleDivisionAiControlPatch
             loggedInactiveButtonParent = true;
             Melon<UADVanillaPlusMod>.Logger.Warning(
                 $"UADVP battle AI control: AI button parent is inactive after placement; roots={DescribeOrderRoots(ui)}.");
-        }
-    }
-
-    internal static void RefreshDivisionCardLabel(UIDivision divisionUi)
-    {
-        try
-        {
-            Division? division = divisionUi?.CurrentDivision;
-            if (division == null ||
-                divisionUi?.Name == null ||
-                !IsDivisionAiControlledByVp(division) ||
-                !IsFriendlyDivision(division))
-            {
-                return;
-            }
-
-            string? labelKey = FriendlyDivisionCommandLabelIgnoringVpAi(division);
-            divisionUi.Name.text = string.IsNullOrEmpty(labelKey)
-                ? string.Empty
-                : LocalizeManager.Localize(labelKey);
-        }
-        catch (Exception ex)
-        {
-            if (loggedDivisionCardCorrectionFailed)
-                return;
-
-            loggedDivisionCardCorrectionFailed = true;
-            Melon<UADVanillaPlusMod>.Logger.Warning(
-                $"UADVP battle AI control: could not correct division-card AI label. {ex.GetType().Name}: {ex.Message}");
         }
     }
 
@@ -358,17 +336,19 @@ internal static class BattleDivisionAiControlPatch
 
     private sealed class OrderButtonContext
     {
-        internal OrderButtonContext(GameObject root, Transform parent, Button template, string sourceName)
+        internal OrderButtonContext(GameObject root, Transform parent, Button template, Button? anchor, string sourceName)
         {
             Root = root;
             Parent = parent;
             Template = template;
+            Anchor = anchor;
             SourceName = sourceName;
         }
 
         internal GameObject Root { get; }
         internal Transform Parent { get; }
         internal Button Template { get; }
+        internal Button? Anchor { get; }
         internal string SourceName { get; }
     }
 
@@ -376,18 +356,41 @@ internal static class BattleDivisionAiControlPatch
     {
         foreach ((string sourceName, GameObject root) in roots)
         {
-            if (sourceName != "formationOrders" || !root.activeInHierarchy)
+            if (!root.activeInHierarchy)
                 continue;
 
-            Button? template = FindButtonTemplate(root, activeOnly: true);
-            if (template == null)
+            OrderButtonContext? context = ResolveModeSelectorButtonContext(root, sourceName);
+            if (context != null)
+                return context;
+        }
+
+        return null;
+    }
+
+    private static OrderButtonContext? ResolveModeSelectorButtonContext(GameObject root, string sourceName)
+    {
+        Button[] buttons = root.GetComponentsInChildren<Button>(true);
+        List<Button> modeButtons = buttons
+            .Where(button => IsUsableTemplateButton(button, activeOnly: true) && IsModeSelectorButton(button))
+            .ToList();
+
+        if (modeButtons.Count == 0)
+            return null;
+
+        foreach (IGrouping<int, Button> group in modeButtons
+                     .Where(button => button.transform.parent != null)
+                     .GroupBy(button => button.transform.parent.gameObject.GetInstanceID())
+                     .OrderByDescending(group => group.Count())
+                     .ThenByDescending(group => group.Any(ButtonIsPreferredAnchor)))
+        {
+            Button first = group.First();
+            Transform? parent = first.transform.parent;
+            if (parent == null || !parent.gameObject.activeInHierarchy)
                 continue;
 
-            Transform parent = ResolveButtonParent(root, template);
-            if (!parent.gameObject.activeInHierarchy)
-                continue;
-
-            return new OrderButtonContext(root, parent, template, sourceName);
+            Button template = PreferredButtonInCluster(group) ?? first;
+            Button anchor = PreferredAnchorInCluster(group) ?? template;
+            return new OrderButtonContext(root, parent, template, anchor, sourceName);
         }
 
         return null;
@@ -459,12 +462,6 @@ internal static class BattleDivisionAiControlPatch
         return button;
     }
 
-    private static Transform ResolveButtonParent(GameObject root, Button template)
-    {
-        Transform? templateParent = template.transform.parent;
-        return templateParent != null ? templateParent : root.transform;
-    }
-
     private static List<Button> FindExistingAiControlButtons(IEnumerable<(string SourceName, GameObject Root)> roots)
     {
         List<Button> buttons = new();
@@ -518,36 +515,32 @@ internal static class BattleDivisionAiControlPatch
         return null;
     }
 
-    private static Button? FindButtonTemplate(GameObject root, bool activeOnly = false)
+    private static Button? PreferredButtonInCluster(IEnumerable<Button> buttons)
     {
-        Button? fallback = null;
-        Button? directFallback = null;
-        Button[] buttons = root.GetComponentsInChildren<Button>(true);
-
         foreach (string preferredName in PreferredTemplateButtonNames)
         {
             foreach (Button button in buttons)
             {
-                if (!IsUsableTemplateButton(button, activeOnly))
-                    continue;
-
-                fallback ??= button;
-                if (ButtonNameMatches(button, preferredName))
+                if (button != null && ButtonNameMatches(button, preferredName))
                     return button;
             }
         }
 
-        foreach (Button button in buttons)
-        {
-            if (!IsUsableTemplateButton(button, activeOnly))
-                continue;
+        return null;
+    }
 
-            fallback ??= button;
-            if (button.transform.parent == root.transform)
-                directFallback ??= button;
+    private static Button? PreferredAnchorInCluster(IEnumerable<Button> buttons)
+    {
+        foreach (string preferredName in PreferredTemplateButtonNames)
+        {
+            foreach (Button button in buttons)
+            {
+                if (button != null && ButtonNameMatches(button, preferredName))
+                    return button;
+            }
         }
 
-        return directFallback ?? fallback;
+        return null;
     }
 
     private static bool IsUsableTemplateButton(Button button, bool activeOnly)
@@ -559,6 +552,18 @@ internal static class BattleDivisionAiControlPatch
                (button.gameObject.activeInHierarchy &&
                 (button.transform.parent?.gameObject.activeInHierarchy ?? false));
     }
+
+    private static bool IsModeSelectorButton(Button button)
+    {
+        foreach (string modeName in ModeSelectorButtonNames)
+            if (ButtonNameMatches(button, modeName))
+                return true;
+
+        return false;
+    }
+
+    private static bool ButtonIsPreferredAnchor(Button button)
+        => button != null && ButtonNameMatches(button, "Retreat");
 
     private static bool ButtonNameMatches(Button button, string preferredName)
     {
@@ -577,7 +582,13 @@ internal static class BattleDivisionAiControlPatch
             Transform parent = orderContext.Parent;
             if (button.transform.parent != parent)
                 button.transform.SetParent(parent, false);
-            button.transform.SetAsLastSibling();
+
+            Button? anchor = orderContext.Anchor;
+            if (anchor != null && anchor.transform.parent == parent)
+                button.transform.SetSiblingIndex(anchor.transform.GetSiblingIndex() + 1);
+            else
+                button.transform.SetAsLastSibling();
+
             GameObject parentObject = parent.gameObject;
 
             if (parentObject.GetComponent<HorizontalLayoutGroup>() != null ||
@@ -599,6 +610,9 @@ internal static class BattleDivisionAiControlPatch
                     continue;
 
                 if (sibling.transform.parent != parent)
+                    continue;
+
+                if (!sibling.gameObject.activeInHierarchy || !IsModeSelectorButton(sibling))
                     continue;
 
                 RectTransform? siblingRect = sibling.GetComponent<RectTransform>();
@@ -668,62 +682,6 @@ internal static class BattleDivisionAiControlPatch
         catch (Exception ex)
         {
             return $"unavailable:{ex.GetType().Name}";
-        }
-    }
-
-    private static string? FriendlyDivisionCommandLabelIgnoringVpAi(Division division)
-    {
-        if (HasSinkingShip(division))
-            return "$Ui_Division_Sink";
-
-        if (division.followTarget != null)
-            return "$Ui_ShipControls_Follow";
-
-        if (division.ScoutDivision != null)
-            return "$Ui_ShipControls_Scout";
-
-        if (division.ScreenDivision != null)
-            return "$Ui_ShipControls_Screen";
-
-        if (division.retreat)
-            return "$Ui_ShipControls_Retreat";
-
-        return division.IsMoving() ? "$Ui_Division_BattleLine" : null;
-    }
-
-    private static bool HasSinkingShip(Division division)
-    {
-        try
-        {
-            foreach (Ship ship in division.ships)
-            {
-                if (ship != null && ship.isSinking)
-                    return true;
-            }
-        }
-        catch
-        {
-        }
-
-        return false;
-    }
-
-    private static bool IsFriendlyDivision(Division division)
-    {
-        try
-        {
-            Ship? leader = division.leader;
-            if (leader?.player == null || PlayerController.Instance == null)
-                return false;
-
-            CampaignBattle? battle = G.Battle;
-            return battle == null
-                ? leader.player.Pointer == PlayerController.Instance.Pointer
-                : battle.SameAlliance(PlayerController.Instance, leader.player);
-        }
-        catch
-        {
-            return false;
         }
     }
 
@@ -902,14 +860,6 @@ internal static class BattleDivisionAiControlInputPatch
     [HarmonyPostfix]
     private static void PostfixUpdateBattle(Ui __instance)
         => BattleDivisionAiControlPatch.HandleBattleInputPostfix(__instance);
-}
-
-[HarmonyPatch(typeof(UIDivision), nameof(UIDivision.RefreshUI))]
-internal static class BattleDivisionAiControlDivisionCardPatch
-{
-    [HarmonyPostfix]
-    private static void PostfixRefreshUI(UIDivision __instance)
-        => BattleDivisionAiControlPatch.RefreshDivisionCardLabel(__instance);
 }
 
 [HarmonyPatch]
