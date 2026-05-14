@@ -13,6 +13,7 @@ namespace UADVanillaPlus.Harmony;
 [HarmonyPatch(typeof(MapUI))]
 internal static class CampaignPortShipCountPatch
 {
+    private const float DirtyRefreshDebounceSeconds = 0.2f;
     private const float SafetyRefreshIntervalSeconds = 10f;
     private static readonly Color OccupiedPortLabelColor = new(0.08f, 0.08f, 0.08f, 1f);
     private static readonly Color EmptyPortLabelColor = new(0.18f, 0.18f, 0.18f, 1f);
@@ -24,6 +25,7 @@ internal static class CampaignPortShipCountPatch
     private static IntPtr cachedPortsRootPointer;
     private static bool portLabelCacheDirty = true;
     private static bool countsDirty = true;
+    private static float earliestDirtyRefreshTime;
     private static float nextSafetyRefreshTime;
     private static string lastLoggedSummary = string.Empty;
 
@@ -33,6 +35,7 @@ internal static class CampaignPortShipCountPatch
     {
         RebuildPortLabelCache(__instance);
         countsDirty = true;
+        earliestDirtyRefreshTime = 0f;
         RefreshPortLabels(__instance);
     }
 
@@ -42,6 +45,7 @@ internal static class CampaignPortShipCountPatch
     {
         portLabelCacheDirty = true;
         countsDirty = true;
+        earliestDirtyRefreshTime = 0f;
         RefreshPortLabels(__instance);
     }
 
@@ -53,7 +57,8 @@ internal static class CampaignPortShipCountPatch
             return;
 
         bool safetyRefresh = Time.realtimeSinceStartup >= nextSafetyRefreshTime;
-        if (!countsDirty && !safetyRefresh)
+        bool dirtyRefreshReady = countsDirty && Time.realtimeSinceStartup >= earliestDirtyRefreshTime;
+        if (!dirtyRefreshReady && !safetyRefresh)
             return;
 
         if (RefreshPortLabels(__instance))
@@ -64,7 +69,10 @@ internal static class CampaignPortShipCountPatch
     }
 
     internal static void MarkCountsDirty()
-        => countsDirty = true;
+    {
+        countsDirty = true;
+        earliestDirtyRefreshTime = Time.realtimeSinceStartup + DirtyRefreshDebounceSeconds;
+    }
 
     private static List<PortLabelEntry> GetPortLabelCache(MapUI mapUi)
     {

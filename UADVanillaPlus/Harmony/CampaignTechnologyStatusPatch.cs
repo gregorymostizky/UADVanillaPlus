@@ -19,6 +19,11 @@ internal static class CampaignTechnologyStatusPatch
     private static readonly Regex NextDiscoverySuffixRegex = new(@"\s*\(Next \d+m\)\s*$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
     private static readonly HashSet<GameObject> TooltipTargets = new();
     private static string lastLoggedSummary = string.Empty;
+    private static bool hasCachedNextDiscovery;
+    private static bool cachedNextDiscoveryHasValue;
+    private static IntPtr cachedNextDiscoveryPlayer;
+    private static int cachedNextDiscoveryTurn = -1;
+    private static DiscoveryEstimate cachedNextDiscovery;
 
     [HarmonyPostfix]
     [HarmonyPatch(nameof(CampaignCountryInfoUI.Refresh))]
@@ -99,6 +104,25 @@ internal static class CampaignTechnologyStatusPatch
             return false;
 
         CampaignController safeCampaign = campaign!;
+        int turn;
+        try
+        {
+            turn = safeCampaign.CurrentDate.turn;
+        }
+        catch
+        {
+            return false;
+        }
+
+        IntPtr playerKey = PlayerKey(player);
+        if (hasCachedNextDiscovery &&
+            cachedNextDiscoveryPlayer == playerKey &&
+            cachedNextDiscoveryTurn == turn)
+        {
+            estimate = cachedNextDiscovery;
+            return cachedNextDiscoveryHasValue;
+        }
+
         int bestMonths = int.MaxValue;
         string bestName = string.Empty;
         List<string> candidateDetails = new();
@@ -142,10 +166,23 @@ internal static class CampaignTechnologyStatusPatch
         }
 
         if (bestMonths == int.MaxValue)
+        {
+            CacheNextDiscovery(playerKey, turn, false, default);
             return false;
+        }
 
         estimate = new DiscoveryEstimate(bestMonths, bestName, string.Join("; ", candidateDetails.Take(5)));
+        CacheNextDiscovery(playerKey, turn, true, estimate);
         return true;
+    }
+
+    private static void CacheNextDiscovery(IntPtr playerKey, int turn, bool hasValue, DiscoveryEstimate estimate)
+    {
+        hasCachedNextDiscovery = true;
+        cachedNextDiscoveryPlayer = playerKey;
+        cachedNextDiscoveryTurn = turn;
+        cachedNextDiscoveryHasValue = hasValue;
+        cachedNextDiscovery = estimate;
     }
 
     private static string TechnologyName(Technology tech)
@@ -182,6 +219,21 @@ internal static class CampaignTechnologyStatusPatch
 
         OnLeave onLeave = target.AddComponent<OnLeave>();
         onLeave.action = new System.Action(() => G.ui.HideTooltip());
+    }
+
+    private static IntPtr PlayerKey(Player player)
+    {
+        try
+        {
+            if (player.data != null)
+                return player.data.Pointer;
+        }
+        catch
+        {
+            // Fall back to the player wrapper below.
+        }
+
+        return player.Pointer;
     }
 
     private readonly record struct DiscoveryEstimate(int Months, string Name, string DebugDetails);

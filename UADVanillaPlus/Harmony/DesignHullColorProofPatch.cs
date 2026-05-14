@@ -284,11 +284,13 @@ internal static class DesignHullColorProofPatch
     private static int LodRendererLogCount;
     private static int MissedGunLodRendererLogCount;
     private static int NationPaintSettingsLogCount;
+    private static int PendingCampaignBattleCountryMapLogCount;
     private static int ResolvedNationPaintRevision = -1;
     private static int BattleRepaintGeneration;
     private static bool BattleRepaintScheduled;
     private static int BattleRepaintScheduledGeneration;
     private static string LastCampaignBattleCountryMapId = string.Empty;
+    private static CampaignBattle? PendingCampaignBattleCountryMap;
     private const int MaxApplicationLogsPerArea = 4;
     private const int MaxLodRendererLogs = 8;
     private const int MaxMissedGunLodRendererLogs = 12;
@@ -415,6 +417,7 @@ internal static class DesignHullColorProofPatch
 
         if (!IsEnabled)
         {
+            PendingCampaignBattleCountryMap = null;
             ResetScenePaintCache("Experimental Nation Ship Paints disabled");
             return;
         }
@@ -946,27 +949,155 @@ internal static class DesignHullColorProofPatch
     private static string HexString(Color32 color)
         => $"#{color.r:X2}{color.g:X2}{color.b:X2}";
 
-    internal static void RememberCurrentCampaignBattleCountries(string context)
+    internal static void QueueCampaignBattleCountryMap(CampaignBattle? battle, string context)
+    {
+        if (!IsEnabled || battle == null || !IsCampaignBattleForPaint(battle))
+            return;
+
+        PendingCampaignBattleCountryMap = battle;
+        if (PendingCampaignBattleCountryMapLogCount++ < 4)
+        {
+            Melon<UADVanillaPlusMod>.Logger.Msg(
+                $"UADVP ship paint proof: queued campaign battle paint country map during {context} for battle {SafeCampaignBattleId(battle)}.");
+        }
+    }
+
+    internal static void RememberBattleStateCampaignCountries(string context)
     {
         if (!IsEnabled)
             return;
 
-        if (BattleCountryMapLogCount++ < 2)
+        try
         {
-            Melon<UADVanillaPlusMod>.Logger.Msg(
-                $"UADVP ship paint proof: campaign battle country mapping skipped during {context}; only saved custom-battle country maps are considered reliable for Experimental Nation Ship Paints.");
+            CampaignBattle? battle = CurrentCampaignBattleForPaint() ?? PendingCampaignBattleCountryMap;
+            PendingCampaignBattleCountryMap = null;
+
+            if (battle == null || !IsCampaignBattleForPaint(battle))
+                return;
+
+            RememberCurrentCampaignBattleCountries(battle, context);
+        }
+        catch (Exception ex)
+        {
+            Melon<UADVanillaPlusMod>.Logger.Warning(
+                $"UADVP ship paint proof: campaign battle country capture failed during {context}. {ex.GetType().Name}: {ex.Message}");
         }
     }
 
-    private static void AddCampaignBattleCountry(Il2CppSystem.Collections.Generic.List<Ship>? ships, Player? player)
+    internal static void RememberCurrentCampaignBattleCountries(CampaignBattle? battle, string context)
+    {
+        if (!IsEnabled)
+            return;
+
+        if (battle == null)
+            return;
+
+        if (!IsCampaignBattleForPaint(battle))
+            return;
+
+        string mapId = CampaignBattleCountryMapId(battle);
+        if (!string.IsNullOrWhiteSpace(mapId) &&
+            string.Equals(mapId, LastCampaignBattleCountryMapId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        BattleCountryByShipId.Clear();
+        LastCampaignBattleCountryMapId = string.Empty;
+
+        int mapped = 0;
+        mapped += AddCampaignBattleCountry(battle.AttackerShips, battle.Attacker);
+        mapped += AddCampaignBattleCountry(battle.DefenderShips, battle.Defender);
+        mapped += AddCampaignBattleCountry(battle.ShipsAdditionalAttacker, battle.Attacker);
+        mapped += AddCampaignBattleCountry(battle.ShipsAdditionalDefender, battle.Defender);
+
+        if (mapped <= 0)
+            return;
+
+        LastCampaignBattleCountryMapId = mapId;
+        if (BattleCountryMapLogCount++ < 4)
+        {
+            string countries = string.Join(", ", BattleCountryByShipId.Values.Distinct(StringComparer.OrdinalIgnoreCase));
+            Melon<UADVanillaPlusMod>.Logger.Msg(
+                $"UADVP ship paint proof: remembered campaign battle paint countries during {context} for {mapped} ship(s): {countries}.");
+        }
+    }
+
+    private static string CampaignBattleCountryMapId(CampaignBattle battle)
+    {
+        try
+        {
+            return string.Join("|",
+                battle.Id.ToString(),
+                PlayerLabel(battle.Attacker),
+                ShipListCount(battle.AttackerShips),
+                ShipListCount(battle.ShipsAdditionalAttacker),
+                PlayerLabel(battle.Defender),
+                ShipListCount(battle.DefenderShips),
+                ShipListCount(battle.ShipsAdditionalDefender));
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private static CampaignBattle? CurrentCampaignBattleForPaint()
+    {
+        try
+        {
+            CampaignBattle? battle = G.Battle;
+            if (battle != null)
+                return battle;
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            return BattleManager.Instance?.CurrentBattle;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static bool IsCampaignBattleForPaint(CampaignBattle battle)
+    {
+        try
+        {
+            return battle.IsCampaignBattle;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static string SafeCampaignBattleId(CampaignBattle battle)
+    {
+        try
+        {
+            return battle.Id.ToString();
+        }
+        catch
+        {
+            return "<battle-id-error>";
+        }
+    }
+
+    private static int AddCampaignBattleCountry(Il2CppSystem.Collections.Generic.List<Ship>? ships, Player? player)
     {
         if (ships == null || player == null)
-            return;
+            return 0;
 
         string country = PlayerLabel(player);
         if (string.IsNullOrWhiteSpace(country))
-            return;
+            return 0;
 
+        int mapped = 0;
         foreach (Ship ship in ships)
         {
             if (ship == null)
@@ -976,12 +1107,29 @@ internal static class DesignHullColorProofPatch
             {
                 string id = ship.id.ToString();
                 if (!string.IsNullOrWhiteSpace(id))
+                {
                     BattleCountryByShipId[id] = country;
+                    mapped++;
+                }
             }
             catch
             {
                 // Ignore ships that do not have a stable battle id yet.
             }
+        }
+
+        return mapped;
+    }
+
+    private static int ShipListCount(Il2CppSystem.Collections.Generic.List<Ship>? ships)
+    {
+        try
+        {
+            return ships?.Count ?? 0;
+        }
+        catch
+        {
+            return 0;
         }
     }
 
@@ -990,6 +1138,7 @@ internal static class DesignHullColorProofPatch
         if (!IsEnabled)
             return;
 
+        PendingCampaignBattleCountryMap = null;
         BattleCountryByShipId.Clear();
         LastCampaignBattleCountryMapId = string.Empty;
         if (save == null)
@@ -2333,6 +2482,17 @@ internal static class DesignHullColorProofCustomBattleSavePatch
     }
 }
 
+[HarmonyPatch(typeof(BattleManager), nameof(BattleManager.AcceptBattle))]
+internal static class DesignHullColorProofCampaignBattleAcceptPatch
+{
+    [HarmonyPrefix]
+    private static void Prefix(CampaignBattle battle, bool autoResolve)
+    {
+        if (DesignHullColorProofPatch.IsEnabled && !autoResolve)
+            DesignHullColorProofPatch.QueueCampaignBattleCountryMap(battle, "AcceptBattle prefix");
+    }
+}
+
 [HarmonyPatch(typeof(Ship), "ShowDamagedVisuals")]
 internal static class DesignHullColorProofDamageVisualPatch
 {
@@ -2362,6 +2522,7 @@ internal static class DesignHullColorProofEnterStatePatch
 
         if (state == GameManager.GameState.Battle)
         {
+            DesignHullColorProofPatch.RememberBattleStateCampaignCountries("entering Battle");
             DesignHullColorProofPatch.ScheduleBattleRepaintRetries("entering Battle", repaintImmediately: true);
             return;
         }

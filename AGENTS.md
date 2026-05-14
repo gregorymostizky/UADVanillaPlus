@@ -47,6 +47,48 @@ Copy the built DLL directly after a successful build. Do not run a process check
 Copy-Item -LiteralPath 'E:\Codex\UADVanillaPlus\UADVanillaPlus\bin\Release\net6.0\UADVanillaPlus.dll' -Destination 'E:\SteamLibrary\steamapps\common\Ultimate Admiral Dreadnoughts\Mods\UADVanillaPlus.dll' -Force
 ```
 
+## Crash Dumps And Native Debugging
+
+When UAD crashes without a managed exception in `Latest.log`, check Windows crash artifacts before guessing. WER reports may only contain `Report.wer`; real dumps are often under `C:\Users\grego\AppData\Local\CrashDumps`. Copy useful UAD dumps into `E:\Codex\UADCrashDumps\dumps` so analysis stays in the workspace.
+
+Workspace-local crash tooling installed on 2026-05-14:
+
+- .NET SDK 8: `E:\Codex\.tools\dotnet-sdk\dotnet.exe`
+- `dotnet-dump`: `E:\Codex\.tools\dotnet-tools\dotnet-dump.exe`
+- Windows Debugging Tools `cdb`: `E:\Codex\.tools\WindowsKits\Debuggers\x64\cdb.exe`
+- Sysinternals ProcDump: `E:\Codex\.tools\Procdump\procdump64.exe`
+
+Per-user WER full dumps are enabled for `Ultimate Admiral Dreadnoughts.exe` under `HKCU\Software\Microsoft\Windows\Windows Error Reporting\LocalDumps\Ultimate Admiral Dreadnoughts.exe`:
+
+- `DumpFolder`: `E:\Codex\UADCrashDumps\LocalDumps`
+- `DumpCount`: `5`
+- `DumpType`: `2` (full user-mode dump)
+
+The next native crash should create a larger `.dmp` in that folder. Full dumps can be large; delete old files from `E:\Codex\UADCrashDumps\LocalDumps` after they are no longer useful.
+
+Use `dotnet-dump` first for managed/interop clues. It needs the workspace .NET root on PATH because the system `dotnet` may only have an older runtime:
+
+```powershell
+$env:DOTNET_ROOT='E:\Codex\.tools\dotnet-sdk'
+$env:PATH='E:\Codex\.tools\dotnet-sdk;E:\Codex\.tools\dotnet-tools;' + $env:PATH
+& 'E:\Codex\.tools\dotnet-tools\dotnet-dump.exe' analyze 'E:\Codex\UADCrashDumps\dumps\<dump-file>.dmp' -c "threads" -c "clrthreads" -c "clrstack -all" -c "pe" -c "exit"
+```
+
+Use `cdb` when native frames matter. Public symbols are limited for game binaries, but even export-level stacks can show whether the fault crosses `coreclr`, `GameAssembly.dll`, MelonLoader's `version.dll` shim, and `UnityPlayer`:
+
+```powershell
+& 'E:\Codex\.tools\WindowsKits\Debuggers\x64\cdb.exe' -y 'srv*E:\Codex\.tools\symbols*https://msdl.microsoft.com/download/symbols' -z 'E:\Codex\UADCrashDumps\dumps\<dump-file>.dmp' -c ".ecxr; r; k; lm m coreclr; lm m GameAssembly; lm m version; q"
+```
+
+If the next repro needs a richer dump than WER gives, attach ProcDump before triggering the crash. Prefer attaching by PID:
+
+```powershell
+$p = Get-Process | Where-Object { $_.ProcessName -eq 'Ultimate Admiral Dreadnoughts' } | Select-Object -First 1
+& 'E:\Codex\.tools\Procdump\procdump64.exe' -accepteula -ma -e 1 $p.Id 'E:\Codex\UADCrashDumps'
+```
+
+For the 2026-05-14 battle-start crash, `dotnet-dump` showed `System.ExecutionEngineException` at `Il2CppInterop.Runtime.IL2CPP.il2cpp_value_box`, and `cdb` showed the native path crossing `coreclr -> GameAssembly.dll -> version.dll -> UnityPlayer`. Treat that shape as an Il2CppInterop/Harmony/native boundary problem, not a normal catchable C# exception.
+
 ## Current Feature Layout
 
 - `plans/`: cross-session implementation notes, reusable investigation docs, vanilla-flow maps, formula notes, and next-step plans. Read the relevant file before resuming a planned feature or related investigation.

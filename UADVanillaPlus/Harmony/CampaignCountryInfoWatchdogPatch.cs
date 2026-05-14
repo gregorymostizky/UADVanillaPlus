@@ -14,10 +14,10 @@ namespace UADVanillaPlus.Harmony;
 [HarmonyPatch(typeof(Ui), "LateUpdate")]
 internal static class CampaignCountryInfoWatchdogPatch
 {
+    private const float InstanceCacheRefreshIntervalSeconds = 5f;
     private static readonly List<CampaignCountryInfoUI> CachedInstances = new();
+    private static readonly Dictionary<IntPtr, string> LastLoggedStateByInstance = new();
     private static float nextCacheRefreshTime;
-    private static float nextPeriodicRefreshTime;
-    private static string lastLoggedState = string.Empty;
     private static string lastLoggedMaintenanceRepair = string.Empty;
 
     [HarmonyPostfix]
@@ -33,30 +33,37 @@ internal static class CampaignCountryInfoWatchdogPatch
             }
 
             RefreshInstanceCacheIfNeeded();
-            bool periodicRefresh = Time.realtimeSinceStartup >= nextPeriodicRefreshTime;
-            if (periodicRefresh)
-                nextPeriodicRefreshTime = Time.realtimeSinceStartup + 1f;
 
             int applied = 0;
+            bool sawDestroyedInstance = false;
             foreach (CampaignCountryInfoUI countryInfo in CachedInstances)
             {
-                if (countryInfo == null || !countryInfo.gameObject.activeInHierarchy)
+                if (countryInfo == null)
+                {
+                    sawDestroyedInstance = true;
+                    continue;
+                }
+
+                if (!countryInfo.gameObject.activeInHierarchy)
                     continue;
 
                 bool missingMaintenance = !CampaignConstructionStatusPatch.HasMaintenanceMarkers(countryInfo);
                 bool missingAnyMarker = MissingAnyVpMarker(countryInfo);
-                if (periodicRefresh || missingAnyMarker)
+                if (missingAnyMarker)
                 {
                     string maintenanceBefore = CampaignConstructionStatusPatch.DebugMaintenanceText(countryInfo);
                     ApplyDecorations(countryInfo);
                     string maintenanceAfter = CampaignConstructionStatusPatch.DebugMaintenanceText(countryInfo);
-                    LogMaintenanceRepairOnce(countryInfo, periodicRefresh, missingMaintenance, maintenanceBefore, maintenanceAfter);
+                    LogMaintenanceRepairOnce(countryInfo, missingMaintenance, maintenanceBefore, maintenanceAfter);
                 }
 
                 applied++;
 
                 LogMarkerStateOnce(countryInfo, applied);
             }
+
+            if (sawDestroyedInstance)
+                nextCacheRefreshTime = 0f;
         }
         catch (Exception ex)
         {
@@ -70,7 +77,7 @@ internal static class CampaignCountryInfoWatchdogPatch
         if (Time.realtimeSinceStartup < nextCacheRefreshTime)
             return;
 
-        nextCacheRefreshTime = Time.realtimeSinceStartup + 1f;
+        nextCacheRefreshTime = Time.realtimeSinceStartup + InstanceCacheRefreshIntervalSeconds;
         CachedInstances.Clear();
         foreach (CampaignCountryInfoUI countryInfo in UnityEngine.Object.FindObjectsOfType<CampaignCountryInfoUI>())
         {
@@ -95,16 +102,16 @@ internal static class CampaignCountryInfoWatchdogPatch
     {
         bool hasMaintenance = CampaignConstructionStatusPatch.HasMaintenanceMarkers(countryInfo);
         string state = $"{applied}|{countryInfo.gameObject.name}|{HasText(countryInfo.ActiveFleetShips, " port)")}|{hasMaintenance}|{hasMaintenance}|{HasText(countryInfo.Technology, "(Next ")}";
-        if (state == lastLoggedState)
+        IntPtr key = countryInfo.Pointer;
+        if (LastLoggedStateByInstance.TryGetValue(key, out string? lastState) && state == lastState)
             return;
 
-        lastLoggedState = state;
+        LastLoggedStateByInstance[key] = state;
         Melon<UADVanillaPlusMod>.Logger.Msg($"UADVP campaign watchdog markers instance/active/maint/tr/tech: {state}.");
     }
 
     private static void LogMaintenanceRepairOnce(
         CampaignCountryInfoUI countryInfo,
-        bool periodicRefresh,
         bool missingMaintenance,
         string before,
         string after)
@@ -112,7 +119,7 @@ internal static class CampaignCountryInfoWatchdogPatch
         if (!missingMaintenance && before == after)
             return;
 
-        string state = $"{countryInfo.gameObject.name}|periodic={periodicRefresh}|missingMaint={missingMaintenance}|before='{before}'|after='{after}'";
+        string state = $"{countryInfo.gameObject.name}|missingMaint={missingMaintenance}|before='{before}'|after='{after}'";
         if (state == lastLoggedMaintenanceRepair)
             return;
 

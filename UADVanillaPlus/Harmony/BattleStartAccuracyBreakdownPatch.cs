@@ -16,6 +16,9 @@ internal static class BattleStartAccuracyBreakdownPatch
     [HarmonyPrefix]
     private static void PrefixAcceptBattle(CampaignBattle battle, bool autoResolve)
     {
+        if (BattleStartShapeDiagnosticPatch.ShouldSkipAccuracySummary(battle, autoResolve))
+            return;
+
         if (battle == null || autoResolve || !LoggedBattles.Add(battle.Id.ToString()))
             return;
 

@@ -16,6 +16,9 @@ internal static class CampaignTaskForceTonnageIndicatorPatch
     private const string FillImageName = "UADVP_TaskForceTonnageFill";
     private const float FullStackBattleTonnage = 100000f;
     private const float MinimumVisibleFill = 0.1f;
+    private const float FillAmountEpsilon = 0.0001f;
+    private const float ColorEpsilon = 0.001f;
+    private static readonly Dictionary<IntPtr, IndicatorState> IndicatorStates = new();
     private static MethodInfo? shipGroupsGetter;
     private static bool attemptedShipGroupsGetterResolve;
     private static bool loggedResolvedShipGroupsGetter;
@@ -72,6 +75,7 @@ internal static class CampaignTaskForceTonnageIndicatorPatch
             if (groups == null)
                 return;
 
+            RefreshContext context = new();
             int updated = 0;
             int fullStacks = 0;
             float maxTonnage = 0f;
@@ -87,7 +91,7 @@ internal static class CampaignTaskForceTonnageIndicatorPatch
                 if (ship == null)
                     continue;
 
-                if (!ApplyIndicator(ship, group, out float tonnage, out bool isFullStack))
+                if (!ApplyIndicator(ship, group, context, out float tonnage, out bool isFullStack))
                     continue;
 
                 updated++;
@@ -445,7 +449,12 @@ internal static class CampaignTaskForceTonnageIndicatorPatch
         Melon<UADVanillaPlusMod>.Logger.Warning(dump.ToString());
     }
 
-    private static bool ApplyIndicator(ShipUI ship, CampaignController.TaskForce group, out float tonnage, out bool isFullStack)
+    private static bool ApplyIndicator(
+        ShipUI ship,
+        CampaignController.TaskForce group,
+        RefreshContext context,
+        out float tonnage,
+        out bool isFullStack)
     {
         tonnage = SafeBattleTonnage(group);
         isFullStack = tonnage >= FullStackBattleTonnage;
@@ -458,9 +467,21 @@ internal static class CampaignTaskForceTonnageIndicatorPatch
         if (fill == null)
             return false;
 
-        Color stackColor = ResolveStackColor(ship, group);
-        ConfigureBackingIcon(icon, stackColor);
-        ConfigureFillImage(fill, icon, stackColor, FillAmountFor(tonnage));
+        float fillAmount = FillAmountFor(tonnage);
+        Color stackColor = ResolveStackColor(ship, group, context);
+        Color backingColor = MutedBackingColor(stackColor);
+        IndicatorState desired = new(icon.Pointer, fill.Pointer, tonnage, fillAmount, stackColor, backingColor);
+        if (IndicatorStates.TryGetValue(ship.Pointer, out IndicatorState previous) &&
+            previous.Matches(desired) &&
+            IsBackingIconConfigured(icon, backingColor) &&
+            IsFillImageConfigured(fill, icon, stackColor, fillAmount))
+        {
+            return true;
+        }
+
+        ConfigureBackingIcon(icon, backingColor);
+        ConfigureFillImage(fill, icon, stackColor, fillAmount);
+        IndicatorStates[ship.Pointer] = desired;
         return true;
     }
 
@@ -485,18 +506,18 @@ internal static class CampaignTaskForceTonnageIndicatorPatch
         return Mathf.Max(MinimumVisibleFill, rawFill);
     }
 
-    private static Color ResolveStackColor(ShipUI ship, CampaignController.TaskForce group)
+    private static Color ResolveStackColor(ShipUI ship, CampaignController.TaskForce group, RefreshContext context)
     {
         try
         {
             Player? controller = group.Controller;
-            Player? player = PlayerController.Instance;
+            Player? player = context.Player;
             if (controller != null && player != null)
             {
                 if (controller == player)
                     return WithVisibleAlpha(ship.FriendlyColor);
 
-                if (IsAtWarWith(player, controller))
+                if (context.IsAtWarWith(controller))
                     return WithVisibleAlpha(ship.EnemyColor);
             }
         }
@@ -556,31 +577,47 @@ internal static class CampaignTaskForceTonnageIndicatorPatch
         return color;
     }
 
-    private static void ConfigureBackingIcon(Image icon, Color stackColor)
+    private static void ConfigureBackingIcon(Image icon, Color backingColor)
     {
-        icon.type = Image.Type.Simple;
-        icon.fillAmount = 1f;
-        icon.preserveAspect = true;
-        icon.color = MutedBackingColor(stackColor);
+        if (icon.type != Image.Type.Simple)
+            icon.type = Image.Type.Simple;
+        if (!Approximately(icon.fillAmount, 1f))
+            icon.fillAmount = 1f;
+        if (!icon.preserveAspect)
+            icon.preserveAspect = true;
+        SetColorIfChanged(icon, backingColor);
     }
 
     private static void ConfigureFillImage(Image fill, Image icon, Color stackColor, float fillAmount)
     {
-        fill.gameObject.SetActive(fillAmount > 0f);
-        fill.enabled = icon.enabled;
-        fill.sprite = icon.overrideSprite != null ? icon.overrideSprite : icon.sprite;
-        fill.overrideSprite = icon.overrideSprite;
-        fill.material = icon.material;
-        fill.preserveAspect = icon.preserveAspect;
-        fill.raycastTarget = false;
-        fill.type = Image.Type.Filled;
-        fill.fillMethod = Image.FillMethod.Horizontal;
-        fill.fillOrigin = (int)Image.OriginHorizontal.Left;
-        fill.fillClockwise = true;
-        fill.fillCenter = true;
-        fill.fillAmount = fillAmount;
-        fill.color = stackColor;
-        fill.transform.SetAsLastSibling();
+        SetActiveIfChanged(fill.gameObject, fillAmount > 0f);
+        if (fill.enabled != icon.enabled)
+            fill.enabled = icon.enabled;
+        var desiredSprite = icon.overrideSprite != null ? icon.overrideSprite : icon.sprite;
+        if (fill.sprite != desiredSprite)
+            fill.sprite = desiredSprite;
+        if (fill.overrideSprite != icon.overrideSprite)
+            fill.overrideSprite = icon.overrideSprite;
+        if (fill.material != icon.material)
+            fill.material = icon.material;
+        if (fill.preserveAspect != icon.preserveAspect)
+            fill.preserveAspect = icon.preserveAspect;
+        if (fill.raycastTarget)
+            fill.raycastTarget = false;
+        if (fill.type != Image.Type.Filled)
+            fill.type = Image.Type.Filled;
+        if (fill.fillMethod != Image.FillMethod.Horizontal)
+            fill.fillMethod = Image.FillMethod.Horizontal;
+        if (fill.fillOrigin != (int)Image.OriginHorizontal.Left)
+            fill.fillOrigin = (int)Image.OriginHorizontal.Left;
+        if (!fill.fillClockwise)
+            fill.fillClockwise = true;
+        if (!fill.fillCenter)
+            fill.fillCenter = true;
+        if (!Approximately(fill.fillAmount, fillAmount))
+            fill.fillAmount = fillAmount;
+        SetColorIfChanged(fill, stackColor);
+        MoveToLastSiblingIfNeeded(fill.transform);
     }
 
     private static Color MutedBackingColor(Color stackColor)
@@ -630,37 +667,113 @@ internal static class CampaignTaskForceTonnageIndicatorPatch
 
     private static void CopyIconBacking(Image source, Image copy)
     {
-        copy.enabled = source.enabled;
-        copy.color = source.color;
-        copy.material = source.material;
-        copy.sprite = source.sprite;
-        copy.overrideSprite = source.overrideSprite;
-        copy.type = source.type;
-        copy.preserveAspect = source.preserveAspect;
-        copy.fillCenter = source.fillCenter;
-        copy.fillMethod = source.fillMethod;
-        copy.fillOrigin = source.fillOrigin;
-        copy.fillAmount = source.fillAmount;
-        copy.fillClockwise = source.fillClockwise;
+        if (copy.enabled != source.enabled)
+            copy.enabled = source.enabled;
+        SetColorIfChanged(copy, source.color);
+        if (copy.material != source.material)
+            copy.material = source.material;
+        if (copy.sprite != source.sprite)
+            copy.sprite = source.sprite;
+        if (copy.overrideSprite != source.overrideSprite)
+            copy.overrideSprite = source.overrideSprite;
+        if (copy.type != source.type)
+            copy.type = source.type;
+        if (copy.preserveAspect != source.preserveAspect)
+            copy.preserveAspect = source.preserveAspect;
+        if (copy.fillCenter != source.fillCenter)
+            copy.fillCenter = source.fillCenter;
+        if (copy.fillMethod != source.fillMethod)
+            copy.fillMethod = source.fillMethod;
+        if (copy.fillOrigin != source.fillOrigin)
+            copy.fillOrigin = source.fillOrigin;
+        if (!Approximately(copy.fillAmount, source.fillAmount))
+            copy.fillAmount = source.fillAmount;
+        if (copy.fillClockwise != source.fillClockwise)
+            copy.fillClockwise = source.fillClockwise;
     }
 
     private static void CopyFillImage(Image source, Image copy)
     {
-        copy.gameObject.SetActive(source.gameObject.activeSelf);
-        copy.enabled = source.enabled;
-        copy.color = source.color;
-        copy.material = source.material;
-        copy.sprite = source.sprite;
-        copy.overrideSprite = source.overrideSprite;
-        copy.type = source.type;
-        copy.preserveAspect = source.preserveAspect;
-        copy.fillCenter = source.fillCenter;
-        copy.fillMethod = source.fillMethod;
-        copy.fillOrigin = source.fillOrigin;
-        copy.fillAmount = source.fillAmount;
-        copy.fillClockwise = source.fillClockwise;
-        copy.raycastTarget = false;
+        SetActiveIfChanged(copy.gameObject, source.gameObject.activeSelf);
+        if (copy.enabled != source.enabled)
+            copy.enabled = source.enabled;
+        SetColorIfChanged(copy, source.color);
+        if (copy.material != source.material)
+            copy.material = source.material;
+        if (copy.sprite != source.sprite)
+            copy.sprite = source.sprite;
+        if (copy.overrideSprite != source.overrideSprite)
+            copy.overrideSprite = source.overrideSprite;
+        if (copy.type != source.type)
+            copy.type = source.type;
+        if (copy.preserveAspect != source.preserveAspect)
+            copy.preserveAspect = source.preserveAspect;
+        if (copy.fillCenter != source.fillCenter)
+            copy.fillCenter = source.fillCenter;
+        if (copy.fillMethod != source.fillMethod)
+            copy.fillMethod = source.fillMethod;
+        if (copy.fillOrigin != source.fillOrigin)
+            copy.fillOrigin = source.fillOrigin;
+        if (!Approximately(copy.fillAmount, source.fillAmount))
+            copy.fillAmount = source.fillAmount;
+        if (copy.fillClockwise != source.fillClockwise)
+            copy.fillClockwise = source.fillClockwise;
+        if (copy.raycastTarget)
+            copy.raycastTarget = false;
     }
+
+    private static bool IsBackingIconConfigured(Image icon, Color backingColor)
+        => icon.type == Image.Type.Simple &&
+           Approximately(icon.fillAmount, 1f) &&
+           icon.preserveAspect &&
+           SameColor(icon.color, backingColor);
+
+    private static bool IsFillImageConfigured(Image fill, Image icon, Color stackColor, float fillAmount)
+    {
+        var desiredSprite = icon.overrideSprite != null ? icon.overrideSprite : icon.sprite;
+        return fill.gameObject.activeSelf == (fillAmount > 0f) &&
+               fill.enabled == icon.enabled &&
+               fill.sprite == desiredSprite &&
+               fill.overrideSprite == icon.overrideSprite &&
+               fill.material == icon.material &&
+               fill.preserveAspect == icon.preserveAspect &&
+               !fill.raycastTarget &&
+               fill.type == Image.Type.Filled &&
+               fill.fillMethod == Image.FillMethod.Horizontal &&
+               fill.fillOrigin == (int)Image.OriginHorizontal.Left &&
+               fill.fillClockwise &&
+               fill.fillCenter &&
+               Approximately(fill.fillAmount, fillAmount) &&
+               SameColor(fill.color, stackColor);
+    }
+
+    private static void SetActiveIfChanged(GameObject gameObject, bool active)
+    {
+        if (gameObject.activeSelf != active)
+            gameObject.SetActive(active);
+    }
+
+    private static void SetColorIfChanged(Image image, Color color)
+    {
+        if (!SameColor(image.color, color))
+            image.color = color;
+    }
+
+    private static void MoveToLastSiblingIfNeeded(Transform transform)
+    {
+        Transform? parent = transform.parent;
+        if (parent != null && transform.GetSiblingIndex() != parent.childCount - 1)
+            transform.SetAsLastSibling();
+    }
+
+    private static bool Approximately(float left, float right)
+        => Mathf.Abs(left - right) <= FillAmountEpsilon;
+
+    private static bool SameColor(Color left, Color right)
+        => Mathf.Abs(left.r - right.r) <= ColorEpsilon &&
+           Mathf.Abs(left.g - right.g) <= ColorEpsilon &&
+           Mathf.Abs(left.b - right.b) <= ColorEpsilon &&
+           Mathf.Abs(left.a - right.a) <= ColorEpsilon;
 
     private static void LogSummaryOnce(int updated, int fullStacks, float maxTonnage)
     {
@@ -685,5 +798,59 @@ internal static class CampaignTaskForceTonnageIndicatorPatch
         loggedMissingShipGroups = true;
         Melon<UADVanillaPlusMod>.Logger.Warning(
             $"UADVP task-force tonnage indicators unavailable because MapUI.shipGroups {reason}.");
+    }
+
+    private sealed class RefreshContext
+    {
+        private readonly Dictionary<IntPtr, bool> warStatusByController = new();
+
+        internal Player? Player { get; } = PlayerController.Instance;
+
+        internal bool IsAtWarWith(Player controller)
+        {
+            Player? player = Player;
+            if (player == null)
+                return false;
+
+            IntPtr key = PlayerKey(controller);
+            if (warStatusByController.TryGetValue(key, out bool isAtWar))
+                return isAtWar;
+
+            isAtWar = CampaignTaskForceTonnageIndicatorPatch.IsAtWarWith(player, controller);
+            warStatusByController[key] = isAtWar;
+            return isAtWar;
+        }
+    }
+
+    private readonly record struct IndicatorState(
+        IntPtr IconPointer,
+        IntPtr FillPointer,
+        float Tonnage,
+        float FillAmount,
+        Color StackColor,
+        Color BackingColor)
+    {
+        internal bool Matches(IndicatorState other)
+            => IconPointer == other.IconPointer &&
+               FillPointer == other.FillPointer &&
+               Approximately(Tonnage, other.Tonnage) &&
+               Approximately(FillAmount, other.FillAmount) &&
+               SameColor(StackColor, other.StackColor) &&
+               SameColor(BackingColor, other.BackingColor);
+    }
+
+    private static IntPtr PlayerKey(Player player)
+    {
+        try
+        {
+            if (player.data != null)
+                return player.data.Pointer;
+        }
+        catch
+        {
+            // Fall back to the player wrapper below.
+        }
+
+        return player.Pointer;
     }
 }

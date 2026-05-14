@@ -51,6 +51,7 @@ internal static class BattleDivisionAiControlPatch
     private static bool loggedButtonReady;
     private static bool loggedInactiveButtonParent;
     private static bool loggedHotkeyFailed;
+    private static bool loggedDivisionCardCorrectionFailed;
 
     internal static bool IsShipAiControlledByVp(Ship ship)
     {
@@ -70,6 +71,12 @@ internal static class BattleDivisionAiControlPatch
         }
     }
 
+    internal static bool IsDivisionAiControlledByVp(Division division)
+        => division != null &&
+           GameManager.IsBattle &&
+           division.Pointer != IntPtr.Zero &&
+           AiControlledDivisions.Contains(division.Pointer);
+
     internal static void Reset(string context)
     {
         if (AiControlledDivisions.Count == 0)
@@ -85,16 +92,30 @@ internal static class BattleDivisionAiControlPatch
         if (ui == null)
             return;
 
-        OrderButtonContext? orderContext = ResolveOrderButtonContext(ui);
-        if (orderContext == null)
+        List<(string SourceName, GameObject Root)> roots = CandidateOrderRoots(ui)
+            .GroupBy(root => root.Root.Pointer)
+            .Select(group => group.First())
+            .ToList();
+
+        if (roots.Count == 0)
         {
             LogMissingUiFields();
             return;
         }
 
-        Button? button = EnsureAiControlButton(orderContext);
-        if (button == null)
+        OrderButtonContext? orderContext = ResolveOrderButtonContext(roots);
+        if (orderContext == null)
+        {
+            HideAiControlButtons(roots);
             return;
+        }
+
+        Button? button = EnsureAiControlButton(orderContext, roots);
+        if (button == null)
+        {
+            HideAiControlButtons(roots);
+            return;
+        }
 
         List<Division> divisions = SelectedEligibleDivisions(ui);
         bool canToggle = GameManager.IsBattle && divisions.Count > 0;
@@ -121,6 +142,35 @@ internal static class BattleDivisionAiControlPatch
             loggedInactiveButtonParent = true;
             Melon<UADVanillaPlusMod>.Logger.Warning(
                 $"UADVP battle AI control: AI button parent is inactive after placement; roots={DescribeOrderRoots(ui)}.");
+        }
+    }
+
+    internal static void RefreshDivisionCardLabel(UIDivision divisionUi)
+    {
+        try
+        {
+            Division? division = divisionUi?.CurrentDivision;
+            if (division == null ||
+                divisionUi?.Name == null ||
+                !IsDivisionAiControlledByVp(division) ||
+                !IsFriendlyDivision(division))
+            {
+                return;
+            }
+
+            string? labelKey = FriendlyDivisionCommandLabelIgnoringVpAi(division);
+            divisionUi.Name.text = string.IsNullOrEmpty(labelKey)
+                ? string.Empty
+                : LocalizeManager.Localize(labelKey);
+        }
+        catch (Exception ex)
+        {
+            if (loggedDivisionCardCorrectionFailed)
+                return;
+
+            loggedDivisionCardCorrectionFailed = true;
+            Melon<UADVanillaPlusMod>.Logger.Warning(
+                $"UADVP battle AI control: could not correct division-card AI label. {ex.GetType().Name}: {ex.Message}");
         }
     }
 
@@ -298,9 +348,7 @@ internal static class BattleDivisionAiControlPatch
     }
 
     private static bool IsDivisionAiControlled(Division division)
-        => division != null &&
-           division.Pointer != IntPtr.Zero &&
-           AiControlledDivisions.Contains(division.Pointer);
+        => IsDivisionAiControlledByVp(division);
 
     private static int SafeShipCount(Division division)
     {
@@ -310,50 +358,39 @@ internal static class BattleDivisionAiControlPatch
 
     private sealed class OrderButtonContext
     {
-        internal OrderButtonContext(GameObject root, Button? template, string sourceName)
+        internal OrderButtonContext(GameObject root, Transform parent, Button template, string sourceName)
         {
             Root = root;
+            Parent = parent;
             Template = template;
             SourceName = sourceName;
         }
 
         internal GameObject Root { get; }
-        internal Button? Template { get; }
+        internal Transform Parent { get; }
+        internal Button Template { get; }
         internal string SourceName { get; }
     }
 
-    private static OrderButtonContext? ResolveOrderButtonContext(Ui ui)
+    private static OrderButtonContext? ResolveOrderButtonContext(IReadOnlyList<(string SourceName, GameObject Root)> roots)
     {
-        List<(string SourceName, GameObject Root)> roots = CandidateOrderRoots(ui)
-            .GroupBy(root => root.Root.Pointer)
-            .Select(group => group.First())
-            .ToList();
-
         foreach ((string sourceName, GameObject root) in roots)
         {
-            Button? template = FindButtonTemplate(root, activeOnly: true);
-            if (template != null)
-                return new OrderButtonContext(root, template, sourceName);
-        }
-
-        foreach ((string sourceName, GameObject root) in roots)
-        {
-            if (!root.activeInHierarchy)
+            if (sourceName != "formationOrders" || !root.activeInHierarchy)
                 continue;
 
-            return new OrderButtonContext(root, FindButtonTemplate(root), sourceName);
+            Button? template = FindButtonTemplate(root, activeOnly: true);
+            if (template == null)
+                continue;
+
+            Transform parent = ResolveButtonParent(root, template);
+            if (!parent.gameObject.activeInHierarchy)
+                continue;
+
+            return new OrderButtonContext(root, parent, template, sourceName);
         }
 
-        foreach ((string sourceName, GameObject root) in roots)
-        {
-            Button? template = FindButtonTemplate(root);
-            if (template != null)
-                return new OrderButtonContext(root, template, sourceName);
-        }
-
-        return roots.Count > 0
-            ? new OrderButtonContext(roots[0].Root, null, roots[0].SourceName)
-            : null;
+        return null;
     }
 
     private static IEnumerable<(string SourceName, GameObject Root)> CandidateOrderRoots(Ui ui)
@@ -368,7 +405,6 @@ internal static class BattleDivisionAiControlPatch
 
     private static IEnumerable<(string SourceName, MemberInfo? Member)> OrderRootMembers()
     {
-        yield return ("ordersFloat", OrdersFloatMember);
         yield return ("formationOrders", FormationOrdersMember);
         yield return ("attachOrders", AttachOrdersMember);
         yield return ("moveOrders", MoveOrdersMember);
@@ -377,23 +413,30 @@ internal static class BattleDivisionAiControlPatch
         yield return ("mainShellOrders", MainShellOrdersMember);
         yield return ("secShellOrders", SecShellOrdersMember);
         yield return ("baseOrders", BaseOrdersMember);
+        yield return ("ordersFloat", OrdersFloatMember);
     }
 
-    private static Button? EnsureAiControlButton(OrderButtonContext orderContext)
+    private static Button? EnsureAiControlButton(
+        OrderButtonContext orderContext,
+        IReadOnlyList<(string SourceName, GameObject Root)> roots)
     {
-        Button? existing = FindExistingAiControlButton(orderContext.Root);
-        Transform parent = ResolveButtonParent(orderContext);
+        if (!orderContext.Root.activeInHierarchy || !orderContext.Parent.gameObject.activeInHierarchy)
+            return null;
+
+        List<Button> existingButtons = FindExistingAiControlButtons(roots);
+        Button? existing = existingButtons.FirstOrDefault(button => IsDescendantOf(button.transform, orderContext.Root.transform))
+            ?? existingButtons.FirstOrDefault();
+        RemoveDuplicateAiControlButtons(existingButtons, existing);
+
         if (existing != null)
         {
-            if (existing.transform.parent != parent)
-                existing.transform.SetParent(parent, false);
+            if (existing.transform.parent != orderContext.Parent)
+                existing.transform.SetParent(orderContext.Parent, false);
 
             return existing;
         }
 
-        GameObject buttonObject = orderContext.Template != null
-            ? UnityEngine.Object.Instantiate(orderContext.Template.gameObject, parent)
-            : CreateFallbackButton(parent);
+        GameObject buttonObject = UnityEngine.Object.Instantiate(orderContext.Template.gameObject, orderContext.Parent);
 
         buttonObject.name = AiControlButtonName;
         buttonObject.SetActive(false);
@@ -416,31 +459,61 @@ internal static class BattleDivisionAiControlPatch
         return button;
     }
 
-    private static Transform ResolveButtonParent(OrderButtonContext orderContext)
+    private static Transform ResolveButtonParent(GameObject root, Button template)
     {
-        Transform? templateParent = orderContext.Template?.transform.parent;
-        return templateParent != null ? templateParent : orderContext.Root.transform;
+        Transform? templateParent = template.transform.parent;
+        return templateParent != null ? templateParent : root.transform;
     }
 
-    private static Button? FindExistingAiControlButton(GameObject root)
+    private static List<Button> FindExistingAiControlButtons(IEnumerable<(string SourceName, GameObject Root)> roots)
     {
-        foreach (Transform transform in root.GetComponentsInChildren<Transform>(true))
+        List<Button> buttons = new();
+        HashSet<IntPtr> seen = new();
+
+        foreach ((_, GameObject root) in roots)
         {
-            if (transform != null && transform.gameObject.name == AiControlButtonName)
-                return transform.GetComponent<Button>() ?? transform.gameObject.GetComponentInChildren<Button>(true);
+            if (root == null)
+                continue;
+
+            foreach (Transform transform in root.GetComponentsInChildren<Transform>(true))
+            {
+                if (transform == null || transform.gameObject.name != AiControlButtonName)
+                    continue;
+
+                Button? button = transform.GetComponent<Button>() ?? transform.gameObject.GetComponentInChildren<Button>(true);
+                if (button == null || button.Pointer == IntPtr.Zero || !seen.Add(button.Pointer))
+                    continue;
+
+                buttons.Add(button);
+            }
         }
 
-        return null;
+        return buttons;
+    }
+
+    private static void HideAiControlButtons(IReadOnlyList<(string SourceName, GameObject Root)> roots)
+    {
+        foreach (Button button in FindExistingAiControlButtons(roots))
+            button.gameObject.SetActive(false);
+    }
+
+    private static void RemoveDuplicateAiControlButtons(List<Button> buttons, Button? keep)
+    {
+        IntPtr keepPointer = keep?.Pointer ?? IntPtr.Zero;
+        foreach (Button button in buttons)
+        {
+            if (button == null || button.Pointer == keepPointer)
+                continue;
+
+            UnityEngine.Object.Destroy(button.gameObject);
+        }
     }
 
     private static Button? FindVisibleAiControlButton(Ui ui)
     {
-        foreach ((_, GameObject root) in CandidateOrderRoots(ui))
-        {
-            Button? button = FindExistingAiControlButton(root);
-            if (button != null && button.gameObject.activeInHierarchy && button.interactable)
+        foreach (Button button in FindExistingAiControlButtons(CandidateOrderRoots(ui)))
+            if (button.gameObject.activeInHierarchy && button.interactable)
                 return button;
-        }
 
         return null;
     }
@@ -501,8 +574,9 @@ internal static class BattleDivisionAiControlPatch
 
         try
         {
-            Transform parent = button.transform.parent ?? ResolveButtonParent(orderContext);
-            button.transform.SetParent(parent, false);
+            Transform parent = orderContext.Parent;
+            if (button.transform.parent != parent)
+                button.transform.SetParent(parent, false);
             button.transform.SetAsLastSibling();
             GameObject parentObject = parent.gameObject;
 
@@ -561,6 +635,17 @@ internal static class BattleDivisionAiControlPatch
         }
     }
 
+    private static bool IsDescendantOf(Transform child, Transform ancestor)
+    {
+        for (Transform? current = child; current != null; current = current.parent)
+        {
+            if (current == ancestor)
+                return true;
+        }
+
+        return false;
+    }
+
     private static float RectWidth(RectTransform rect)
     {
         float width = rect.rect.width;
@@ -586,35 +671,60 @@ internal static class BattleDivisionAiControlPatch
         }
     }
 
-    private static GameObject CreateFallbackButton(Transform parent)
+    private static string? FriendlyDivisionCommandLabelIgnoringVpAi(Division division)
     {
-        GameObject buttonObject = new(AiControlButtonName);
-        buttonObject.AddComponent<RectTransform>();
-        buttonObject.transform.SetParent(parent, false);
+        if (HasSinkingShip(division))
+            return "$Ui_Division_Sink";
 
-        Image image = buttonObject.AddComponent<Image>();
-        image.color = new Color(0.1f, 0.1f, 0.1f, 0.85f);
+        if (division.followTarget != null)
+            return "$Ui_ShipControls_Follow";
 
-        Button button = buttonObject.AddComponent<Button>();
-        button.targetGraphic = image;
+        if (division.ScoutDivision != null)
+            return "$Ui_ShipControls_Scout";
 
-        GameObject textObject = new("Text");
-        textObject.AddComponent<RectTransform>();
-        textObject.transform.SetParent(buttonObject.transform, false);
-        Text text = textObject.AddComponent<Text>();
-        text.alignment = TextAnchor.MiddleCenter;
-        text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-        text.fontSize = 14;
-        text.color = InactiveTextColor;
-        text.text = "AI";
+        if (division.ScreenDivision != null)
+            return "$Ui_ShipControls_Screen";
 
-        RectTransform textRect = textObject.GetComponent<RectTransform>();
-        textRect.anchorMin = Vector2.zero;
-        textRect.anchorMax = Vector2.one;
-        textRect.offsetMin = Vector2.zero;
-        textRect.offsetMax = Vector2.zero;
+        if (division.retreat)
+            return "$Ui_ShipControls_Retreat";
 
-        return buttonObject;
+        return division.IsMoving() ? "$Ui_Division_BattleLine" : null;
+    }
+
+    private static bool HasSinkingShip(Division division)
+    {
+        try
+        {
+            foreach (Ship ship in division.ships)
+            {
+                if (ship != null && ship.isSinking)
+                    return true;
+            }
+        }
+        catch
+        {
+        }
+
+        return false;
+    }
+
+    private static bool IsFriendlyDivision(Division division)
+    {
+        try
+        {
+            Ship? leader = division.leader;
+            if (leader?.player == null || PlayerController.Instance == null)
+                return false;
+
+            CampaignBattle? battle = G.Battle;
+            return battle == null
+                ? leader.player.Pointer == PlayerController.Instance.Pointer
+                : battle.SameAlliance(PlayerController.Instance, leader.player);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static void TryRegisterMiniHotkey(Button button)
@@ -792,6 +902,14 @@ internal static class BattleDivisionAiControlInputPatch
     [HarmonyPostfix]
     private static void PostfixUpdateBattle(Ui __instance)
         => BattleDivisionAiControlPatch.HandleBattleInputPostfix(__instance);
+}
+
+[HarmonyPatch(typeof(UIDivision), nameof(UIDivision.RefreshUI))]
+internal static class BattleDivisionAiControlDivisionCardPatch
+{
+    [HarmonyPostfix]
+    private static void PostfixRefreshUI(UIDivision __instance)
+        => BattleDivisionAiControlPatch.RefreshDivisionCardLabel(__instance);
 }
 
 [HarmonyPatch]
