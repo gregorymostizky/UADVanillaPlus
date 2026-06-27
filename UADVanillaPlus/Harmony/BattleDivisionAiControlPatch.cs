@@ -307,12 +307,12 @@ internal static class BattleDivisionAiControlPatch
     private static bool IsEligibleShip(Ship ship)
     {
         if (ship == null || !GameManager.IsBattle)
-            return false;
+            return true;
 
         try
         {
             if (ship.division == null || ship.player == null || PlayerController.Instance == null)
-                return false;
+                return true;
 
             CampaignBattle? battle = G.Battle;
             return battle == null
@@ -321,7 +321,7 @@ internal static class BattleDivisionAiControlPatch
         }
         catch
         {
-            return false;
+            return true;
         }
     }
 
